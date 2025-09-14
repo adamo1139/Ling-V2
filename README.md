@@ -155,3 +155,25 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 ```
 
 you might need to comment out minor version mismatch with CUDA from being checked. 12.4/12.5/12.8 should be FINE, you should use 12.4 in the system as baseline.
+
+get Megatron
+
+```
+cd Ling-V2
+# apply megatron patch
+bash training/megatron/apply_patch.sh
+# apply te patch
+bash training/te/apply_te_patch.sh
+```
+
+patch megatron processing dataset code to support parquet
+
+```
+bash deploy_parquet_support.sh
+```
+
+to save trained model to safetensors, runs something like this
+
+```
+python tools/convert_dcp_to_safetensors.py --checkpoint-path /home/adamo/projects/pretain_pol/Ling-V2/pretrain_512/iter_0000200 --target-path /home/adamo/projects/pretain_pol/Ling-V2/szczypulka2/ --force-bf16 --override-tokenizer-path /home/adamo/projects/pretain_pol/Ling-V2/resource/tokenizer/config_pretrain
+```
