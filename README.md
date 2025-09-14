@@ -116,7 +116,7 @@ how to get there?
 install Megatron
 
 ```
-pip install megatron-core==0.13.0
+pip install megatron-core==0.13.0 torch==2.6.0
 pip install --no-build-isolation transformer-engine[pytorch]
 ```
 
