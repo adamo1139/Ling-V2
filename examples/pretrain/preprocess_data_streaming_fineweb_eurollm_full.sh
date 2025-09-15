@@ -7,7 +7,7 @@ set -ex
 TOKENIZER_PATH=`dirname $(readlink -f "${BASH_SOURCE[0]}")`/../../resource/tokenizer/euroLLM/tokenizer.model
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
-PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH python ../../preprocess_large_parquet.py \
+PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH python3 ../../preprocess_large_parquet.py \
     --input fineweb2-pol-full.parquet \
     --output-prefix eurollm_processed_data_streaming \
     --tokenizer-type Llama2Tokenizer \
