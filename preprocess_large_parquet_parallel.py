@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Parallel preprocessing script for large Parquet files (280GB+)
-Splits large files into chunks and processes them in parallel for maximum speed.
+Indexed parallel preprocessing script for large Parquet files (280GB+)
+Uses start/end sample indexes to parallelize streaming without file splitting.
 """
 
 import argparse
@@ -11,9 +11,7 @@ import sys
 import time
 import multiprocessing
 import math
-from pathlib import Path
-import subprocess
-import shutil
+from typing import Iterator, Tuple
 
 # Add Megatron to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'Megatron-LM-core_v0.13.0')))
@@ -31,94 +29,208 @@ from megatron.training.arguments import _add_tokenizer_args
 from megatron.core.datasets import indexed_dataset
 
 
-def split_parquet_file(input_file: str, num_partitions: int, temp_dir: str) -> list:
+class StreamingEncoder:
+    """Encoder that processes data in streaming fashion"""
+    
+    def __init__(self, args):
+        self.args = args
+        self.tokenizer = None
+    
+    def initializer(self):
+        """Initialize tokenizer for worker processes"""
+        self.tokenizer = build_tokenizer(self.args)
+    
+    def encode_batch(self, batch_data: list) -> list:
+        """Encode a batch of documents"""
+        if self.tokenizer is None:
+            self.initializer()
+        
+        encoded_batch = []
+        for item in batch_data:
+            if isinstance(item, dict):
+                # Handle dict format from streaming dataset
+                text = item.get('text', '')
+            else:
+                # Handle JSON string format
+                try:
+                    data = json.loads(item)
+                    text = data.get('text', '')
+                except:
+                    text = str(item)
+            
+            if text:
+                # Tokenize the text
+                tokens = self.tokenizer.tokenize(text)
+                if self.args.append_eod and tokens:
+                    tokens.append(self.tokenizer.eod)
+                encoded_batch.append(tokens)
+            else:
+                encoded_batch.append([])
+        
+        return encoded_batch
+
+
+def get_parquet_row_count(parquet_path: str) -> int:
     """
-    Split a large parquet file into smaller chunks for parallel processing
+    Get total number of rows in parquet file without loading data into memory
+    """
+    parquet_file = pq.ParquetFile(parquet_path)
+    return parquet_file.metadata.num_rows
+
+
+def stream_parquet_chunk(parquet_path: str, start_idx: int, end_idx: int, 
+                        batch_size: int = 1000) -> Iterator[list]:
+    """
+    Stream a specific chunk of a parquet file using start/end indexes
     
     Args:
-        input_file: Path to the large parquet file
-        num_partitions: Number of chunks to create
-        temp_dir: Directory to store temporary chunk files
-        
-    Returns:
-        List of chunk file paths
+        parquet_path: Path to the parquet file
+        start_idx: Starting document index
+        end_idx: Ending document index
+        batch_size: Batch size for streaming
+    
+    Yields:
+        Batches of data as lists
     """
-    print(f"Splitting {input_file} into {num_partitions} chunks...")
+    print(f"Streaming chunk: docs {start_idx} to {end_idx}")
     
-    # Read parquet file
-    table = pq.read_table(input_file)
-    total_rows = len(table)
-    rows_per_chunk = math.ceil(total_rows / num_partitions)
+    # Use streaming dataset loading
+    dataset = load_dataset(
+        'parquet', 
+        data_files=parquet_path, 
+        split='train',
+        streaming=True
+    )
     
-    chunk_files = []
+    batch = []
+    current_idx = 0
     
-    for i in range(num_partitions):
-        start_idx = i * rows_per_chunk
-        end_idx = min((i + 1) * rows_per_chunk, total_rows)
+    for item in dataset:
+        # Skip until we reach start_idx
+        if current_idx < start_idx:
+            current_idx += 1
+            continue
         
-        if start_idx >= total_rows:
+        # Stop when we reach end_idx
+        if current_idx >= end_idx:
             break
             
-        chunk_table = table.slice(start_idx, end_idx - start_idx)
-        chunk_file = os.path.join(temp_dir, f"chunk_{i:04d}.parquet")
+        batch.append(item)
+        current_idx += 1
         
-        pq.write_table(chunk_table, chunk_file)
-        chunk_files.append(chunk_file)
-        
-        print(f"Created chunk {i+1}/{num_partitions}: {len(chunk_table)} rows -> {chunk_file}")
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
     
-    return chunk_files
+    # Yield remaining items
+    if batch:
+        yield batch
 
 
-def process_chunk(args_tuple):
+def process_worker_chunks(args_tuple):
     """
-    Process a single chunk file
+    Process multiple chunks assigned to a single worker using streaming
     
     Args:
-        args_tuple: (chunk_file, output_prefix, tokenizer_args)
+        args_tuple: (worker_id, chunk_ranges, input_file, output_prefix, tokenizer_args)
     """
-    chunk_file, output_prefix, tokenizer_args = args_tuple
+    worker_id, chunk_ranges, input_file, output_prefix, tokenizer_args = args_tuple
     
-    print(f"Processing chunk: {chunk_file}")
+    print(f"Worker {worker_id} processing {len(chunk_ranges)} chunks")
     
-    # Build command to process this chunk
-    cmd = [
-        'python', os.path.join(os.path.dirname(__file__), 'Megatron-LM-core_v0.13.0', 'tools', 'preprocess_data.py'),
-        '--input', chunk_file,
-        '--output-prefix', output_prefix,
-        '--workers', '1'  # Each chunk uses 1 worker, but we run multiple chunks in parallel
-    ]
+    # Initialize encoder
+    # Create a temporary args object for this worker
+    class WorkerArgs:
+        def __init__(self, tokenizer_args):
+            for key, value in tokenizer_args.items():
+                setattr(self, key, value)
+            # Set required defaults
+            self.rank = 1
+            self.make_vocab_size_divisible_by = 128
+            self.tensor_model_parallel_size = 1
+            self.vocab_extra_ids = 0
+            self.keep_empty = False
     
-    # Add tokenizer arguments
-    for key, value in tokenizer_args.items():
-        if isinstance(value, bool) and value:
-            cmd.append(f'--{key.replace("_", "-")}')
-        elif not isinstance(value, bool) and value is not None:
-            cmd.extend([f'--{key.replace("_", "-")}', str(value)])
+    worker_args = WorkerArgs(tokenizer_args)
+    encoder = StreamingEncoder(worker_args)
+    encoder.initializer()
     
-    # Run the preprocessing
-    env = os.environ.copy()
-    env['PYTHONPATH'] = os.path.join(os.path.dirname(__file__), 'Megatron-LM-core_v0.13.0')
+    # Setup output files for this worker
+    level = "document"
+    if getattr(worker_args, 'split_sentences', False):
+        level = "sentence"
+    
+    output_bin_files = {}
+    output_idx_files = {}
+    builders = {}
+    
+    json_keys = tokenizer_args.get('json_keys', ['text'])
+    for key in json_keys:
+        output_bin_files[key] = f"{output_prefix}_worker_{worker_id:04d}_{key}_{level}.bin"
+        output_idx_files[key] = f"{output_prefix}_worker_{worker_id:04d}_{key}_{level}.idx"
+        builders[key] = indexed_dataset.IndexedDatasetBuilder(
+            output_bin_files[key],
+            dtype=indexed_dataset.DType.optimal_dtype(encoder.tokenizer.vocab_size),
+        )
+    
+    total_processed = 0
+    start_time = time.time()
     
     try:
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=True)
-        print(f"Completed chunk: {chunk_file}")
-        return True, chunk_file
-    except subprocess.CalledProcessError as e:
-        print(f"Error processing chunk {chunk_file}: {e}")
-        print(f"STDOUT: {e.stdout}")
-        print(f"STDERR: {e.stderr}")
-        return False, chunk_file
+        # Process each chunk assigned to this worker
+        for chunk_id, (start_idx, end_idx) in enumerate(chunk_ranges):
+            print(f"Worker {worker_id} processing chunk {chunk_id+1}/{len(chunk_ranges)}: docs {start_idx}-{end_idx}")
+            
+            # Stream through this chunk
+            for batch_data in stream_parquet_chunk(input_file, start_idx, end_idx):
+                # Encode the batch
+                encoded_batch = encoder.encode_batch(batch_data)
+                
+                # Add to builders
+                for i, tokens in enumerate(encoded_batch):
+                    if tokens:  # Only add non-empty documents
+                        for key in json_keys:
+                            builders[key].add_document(tokens, [len(tokens)])
+                
+                total_processed += len(batch_data)
+        
+        # Finalize the output files
+        for key in json_keys:
+            builders[key].finalize(output_idx_files[key])
+        
+        total_time = time.time() - start_time
+        print(f"Worker {worker_id} completed: {total_processed} documents in {total_time:.1f}s")
+        
+        return True, worker_id, [f"{output_prefix}_worker_{worker_id:04d}" for _ in json_keys]
+        
+    except Exception as e:
+        print(f"Worker {worker_id} failed: {e}")
+        return False, worker_id, None
 
 
-def merge_chunk_outputs(chunk_prefixes: list, final_output_prefix: str, json_keys: list):
+def merge_worker_outputs(worker_prefixes: list, final_output_prefix: str, 
+                        json_keys: list, tokenizer_args: dict):
     """
-    Merge the output from multiple chunks into final files
+    Merge the output from multiple workers into final files
     """
-    print("Merging chunk outputs...")
+    print("Merging worker outputs...")
     
     level = "document"
-    tokenizer = build_tokenizer(get_merge_args())
+    if tokenizer_args.get('split_sentences', False):
+        level = "sentence"
+    
+    # Create temporary args for tokenizer
+    class MergeArgs:
+        def __init__(self, tokenizer_args):
+            for key, value in tokenizer_args.items():
+                setattr(self, key, value)
+            self.rank = 1
+            self.make_vocab_size_divisible_by = 128
+            self.tensor_model_parallel_size = 1
+            self.vocab_extra_ids = 0
+    
+    merge_args = MergeArgs(tokenizer_args)
+    tokenizer = build_tokenizer(merge_args)
     
     for key in json_keys:
         output_bin_file = f"{final_output_prefix}_{key}_{level}.bin"
@@ -129,33 +241,30 @@ def merge_chunk_outputs(chunk_prefixes: list, final_output_prefix: str, json_key
             dtype=indexed_dataset.DType.optimal_dtype(tokenizer.vocab_size),
         )
         
-        for chunk_prefix in chunk_prefixes:
-            chunk_bin_file = f"{chunk_prefix}_{key}_{level}.bin"
-            chunk_idx_file = f"{chunk_prefix}_{key}_{level}.idx"
+        for worker_prefix in worker_prefixes:
+            worker_idx_file = f"{worker_prefix}_{key}_{level}.idx"
             
-            if os.path.exists(chunk_idx_file):
-                print(f"Merging chunk: {chunk_prefix}")
-                builder.add_index(f"{chunk_prefix}_{key}_{level}")
+            if os.path.exists(worker_idx_file):
+                print(f"Merging worker output: {worker_prefix}")
+                builder.add_index(f"{worker_prefix}_{key}_{level}")
         
         builder.finalize(output_idx_file)
         print(f"Created final output: {output_bin_file}")
-
-
-def get_merge_args():
-    """Get minimal args for tokenizer during merge"""
-    class Args:
-        def __init__(self):
-            self.rank = 1
-            self.make_vocab_size_divisible_by = 128
-            self.tensor_model_parallel_size = 1
-            self.vocab_extra_ids = 0
-            self.tokenizer_type = 'GPT2BPETokenizer'  # Default fallback
-            self.tokenizer_model = None
-    return Args()
+    
+    # Clean up worker files
+    print("Cleaning up worker output files...")
+    for worker_prefix in worker_prefixes:
+        for key in json_keys:
+            worker_bin_file = f"{worker_prefix}_{key}_{level}.bin"
+            worker_idx_file = f"{worker_prefix}_{key}_{level}.idx"
+            if os.path.exists(worker_bin_file):
+                os.remove(worker_bin_file)
+            if os.path.exists(worker_idx_file):
+                os.remove(worker_idx_file)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Parallel preprocessing for large Parquet files')
+    parser = argparse.ArgumentParser(description='Indexed parallel preprocessing for large Parquet files')
     
     # Add tokenizer arguments from Megatron
     parser = _add_tokenizer_args(parser)
@@ -172,13 +281,13 @@ def main():
     # Processing arguments
     group = parser.add_argument_group('processing')
     group.add_argument('--workers', type=int, default=16,
-                       help='Number of parallel processes (default: 16)')
+                       help='Number of parallel worker processes (default: 16)')
     group.add_argument('--append-eod', action='store_true',
                        help='Append an <eod> token to the end of a document')
     group.add_argument('--split-sentences', action='store_true',
                        help='Split documents into sentences')
-    group.add_argument('--temp-dir', type=str, default='./temp_chunks',
-                       help='Directory for temporary chunk files')
+    group.add_argument('--batch-size', type=int, default=1000,
+                       help='Batch size for streaming (default: 1000)')
     
     args = parser.parse_args()
     
@@ -199,63 +308,111 @@ def main():
         print("ERROR: datasets library is required. Install with: pip install datasets pyarrow")
         return 1
     
+    print(f"Starting indexed parallel preprocessing with {args.workers} workers")
+    print(f"Input file: {args.input}")
+    print(f"Output prefix: {args.output_prefix}")
+    
     start_time = time.time()
     
-    # Create temp directory
-    temp_dir = args.temp_dir
-    os.makedirs(temp_dir, exist_ok=True)
-    
     try:
-        # Split the large file into chunks
-        chunk_files = split_parquet_file(args.input, args.workers, temp_dir)
+        # Get total document count without loading data
+        print("Getting document count from parquet metadata...")
+        total_docs = get_parquet_row_count(args.input)
+        print(f"Total documents: {total_docs:,}")
         
-        # Prepare arguments for parallel processing
+        # Calculate chunk ranges (4x workers for better load balancing)
+        num_chunks = args.workers * 4
+        docs_per_chunk = math.ceil(total_docs / num_chunks)
+        
+        print(f"Creating {num_chunks} chunks (~{docs_per_chunk:,} docs each)")
+        print(f"Each worker will process 4 chunks sequentially")
+        
+        # Create chunk ranges
+        chunk_ranges = []
+        for i in range(num_chunks):
+            start_idx = i * docs_per_chunk
+            end_idx = min((i + 1) * docs_per_chunk, total_docs)
+            if start_idx < total_docs:
+                chunk_ranges.append((start_idx, end_idx))
+        
+        # Assign chunks to workers (each worker gets 4 chunks)
+        chunks_per_worker = 4
+        worker_tasks = []
+        
+        for worker_id in range(args.workers):
+            worker_chunk_start = worker_id * chunks_per_worker
+            worker_chunk_end = min(worker_chunk_start + chunks_per_worker, len(chunk_ranges))
+            
+            if worker_chunk_start < len(chunk_ranges):
+                worker_chunk_ranges = chunk_ranges[worker_chunk_start:worker_chunk_end]
+                
+                # Prepare tokenizer arguments
+                tokenizer_args = {
+                    'tokenizer_type': args.tokenizer_type,
+                    'tokenizer_model': getattr(args, 'tokenizer_model', None),
+                    'append_eod': args.append_eod,
+                    'split_sentences': args.split_sentences,
+                    'json_keys': args.json_keys,
+                    'batch_size': args.batch_size
+                }
+                
+                worker_tasks.append((
+                    worker_id,
+                    worker_chunk_ranges,
+                    args.input,
+                    args.output_prefix,
+                    tokenizer_args
+                ))
+        
+        print(f"Starting {len(worker_tasks)} workers for parallel processing...")
+        
+        # Process chunks in parallel
+        with multiprocessing.Pool(args.workers) as pool:
+            results = pool.map(process_worker_chunks, worker_tasks)
+        
+        # Check results and collect worker prefixes
+        worker_prefixes = []
+        failed_workers = []
+        
+        for success, worker_id, prefixes in results:
+            if success:
+                if prefixes:
+                    worker_prefixes.extend(prefixes)
+            else:
+                failed_workers.append(worker_id)
+        
+        if failed_workers:
+            print(f"Failed workers: {failed_workers}")
+            return 1
+        
+        # Remove duplicates from worker_prefixes
+        worker_prefixes = list(set(worker_prefixes))
+        
+        # Merge the results
         tokenizer_args = {
             'tokenizer_type': args.tokenizer_type,
             'tokenizer_model': getattr(args, 'tokenizer_model', None),
-            'append_eod': args.append_eod,
-            'split_sentences': args.split_sentences,
-            'json_keys': args.json_keys
+            'split_sentences': args.split_sentences
         }
         
-        # Create processing tasks
-        tasks = []
-        chunk_prefixes = []
-        
-        for i, chunk_file in enumerate(chunk_files):
-            chunk_prefix = os.path.join(temp_dir, f"chunk_{i:04d}_processed")
-            chunk_prefixes.append(chunk_prefix)
-            tasks.append((chunk_file, chunk_prefix, tokenizer_args))
-        
-        # Process chunks in parallel
-        print(f"Processing {len(chunk_files)} chunks in parallel with {args.workers} processes...")
-        
-        with multiprocessing.Pool(args.workers) as pool:
-            results = pool.map(process_chunk, tasks)
-        
-        # Check if all chunks processed successfully
-        failed_chunks = [chunk for success, chunk in results if not success]
-        if failed_chunks:
-            print(f"Failed to process chunks: {failed_chunks}")
-            return 1
-        
-        # Merge the results
-        merge_chunk_outputs(chunk_prefixes, args.output_prefix, args.json_keys)
+        merge_worker_outputs(worker_prefixes, args.output_prefix, 
+                           args.json_keys, tokenizer_args)
         
         total_time = time.time() - start_time
-        print(f"Parallel preprocessing completed in {total_time:.1f} seconds")
+        avg_speed = total_docs / total_time if total_time > 0 else 0
         
-        # Cleanup temp files
-        print("Cleaning up temporary files...")
-        shutil.rmtree(temp_dir)
+        print(f"Indexed parallel preprocessing completed!")
+        print(f"Total time: {total_time:.1f} seconds")
+        print(f"Total documents: {total_docs:,}")
+        print(f"Average speed: {avg_speed:.1f} docs/s")
+        print(f"Speedup vs streaming (~400 docs/s): {avg_speed/400:.1f}x")
         
         return 0
         
     except Exception as e:
-        print(f"Error during parallel processing: {e}")
-        # Cleanup on error
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
+        print(f"Error during indexed parallel processing: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
 

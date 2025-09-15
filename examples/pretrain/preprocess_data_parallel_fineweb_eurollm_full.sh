@@ -14,7 +14,7 @@ PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH python3 /home/ubuntu/preprocessing/Ling-
     --tokenizer-model ${TOKENIZER_PATH} \
     --workers 16 \
     --append-eod \
-    --temp-dir ./temp_parallel_chunks
+    --batch-size 10000
 
 echo "Parallel preprocessing completed!"
 echo "Output files created:"
