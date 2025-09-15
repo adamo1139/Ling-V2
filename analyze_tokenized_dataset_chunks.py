@@ -110,6 +110,22 @@ class IndexedDatasetReader:
             self.bin_buffer_mmap._mmap.close()
             del self.bin_buffer_mmap
 
+def calculate_token_retention(doc_lengths: List[int], max_context_length: int) -> Tuple[int, float]:
+    """
+    Calculate how many tokens would remain if documents are capped at max_context_length
+    
+    Args:
+        doc_lengths: List of document lengths in tokens
+        max_context_length: Maximum context length to cap documents at
+        
+    Returns:
+        Tuple of (retained_tokens, retention_percentage)
+    """
+    doc_array = np.array(doc_lengths)
+    retained_tokens = np.minimum(doc_array, max_context_length).sum()
+    retention_percentage = (retained_tokens / doc_array.sum()) * 100 if doc_array.sum() > 0 else 0.0
+    return int(retained_tokens), float(retention_percentage)
+
 def analyze_dataset(data_path: str) -> Tuple[dict, List[int]]:
     """
     Analyze a tokenized dataset and return statistics
@@ -146,6 +162,20 @@ def analyze_dataset(data_path: str) -> Tuple[dict, List[int]]:
         'percentile_99': float(np.percentile(doc_lengths_array, 99)),
         'percentile_5': float(np.percentile(doc_lengths_array, 5)),
     }
+    
+    # Calculate token retention for different context lengths
+    tokens_retained_512, pct_retained_512 = calculate_token_retention(doc_lengths, 512)
+    tokens_retained_1024, pct_retained_1024 = calculate_token_retention(doc_lengths, 1024)
+    tokens_retained_2048, pct_retained_2048 = calculate_token_retention(doc_lengths, 2048)
+    
+    stats.update({
+        'tokens_retained_512': tokens_retained_512,
+        'tokens_retained_1024': tokens_retained_1024,
+        'tokens_retained_2048': tokens_retained_2048,
+        'token_retention_pct_512': pct_retained_512,
+        'token_retention_pct_1024': pct_retained_1024,
+        'token_retention_pct_2048': pct_retained_2048,
+    })
     
     return stats, doc_lengths
 
@@ -215,6 +245,12 @@ def calculate_overall_stats(all_stats: List[dict]) -> dict:
     total_docs_gt_2048 = 0
     total_docs_all = 0
     
+    # Calculate token retention across all datasets
+    total_tokens_retained_512 = 0
+    total_tokens_retained_1024 = 0
+    total_tokens_retained_2048 = 0
+    total_original_tokens = 0
+    
     for stats in all_stats:
         if stats['doc_lengths'] is not None:
             doc_array = np.array(stats['doc_lengths'])
@@ -222,6 +258,12 @@ def calculate_overall_stats(all_stats: List[dict]) -> dict:
             total_docs_gt_1024 += np.sum(doc_array > 1024)
             total_docs_gt_2048 += np.sum(doc_array > 2048)
             total_docs_all += len(doc_array)
+            
+            # Calculate token retention for overall stats
+            total_tokens_retained_512 += np.minimum(doc_array, 512).sum()
+            total_tokens_retained_1024 += np.minimum(doc_array, 1024).sum()
+            total_tokens_retained_2048 += np.minimum(doc_array, 2048).sum()
+            total_original_tokens += doc_array.sum()
     
     overall_stats.update({
         'num_docs_gt_512': int(total_docs_gt_512),
@@ -230,6 +272,12 @@ def calculate_overall_stats(all_stats: List[dict]) -> dict:
         'pct_docs_gt_512': (total_docs_gt_512 / total_docs_all * 100) if total_docs_all > 0 else 0,
         'pct_docs_gt_1024': (total_docs_gt_1024 / total_docs_all * 100) if total_docs_all > 0 else 0,
         'pct_docs_gt_2048': (total_docs_gt_2048 / total_docs_all * 100) if total_docs_all > 0 else 0,
+        'tokens_retained_512': int(total_tokens_retained_512),
+        'tokens_retained_1024': int(total_tokens_retained_1024),
+        'tokens_retained_2048': int(total_tokens_retained_2048),
+        'token_retention_pct_512': (total_tokens_retained_512 / total_original_tokens * 100) if total_original_tokens > 0 else 0,
+        'token_retention_pct_1024': (total_tokens_retained_1024 / total_original_tokens * 100) if total_original_tokens > 0 else 0,
+        'token_retention_pct_2048': (total_tokens_retained_2048 / total_original_tokens * 100) if total_original_tokens > 0 else 0,
     })
     
     return overall_stats
@@ -246,7 +294,9 @@ def write_results_to_csv(results: List[dict], output_csv: str):
         'data_path', 'num_documents', 'total_tokens', 'min_length', 'max_length',
         'mean_length', 'median_length', 'std_length', 'percentile_5', 'percentile_95',
         'percentile_99', 'num_docs_gt_512', 'num_docs_gt_1024', 'num_docs_gt_2048',
-        'pct_docs_gt_512', 'pct_docs_gt_1024', 'pct_docs_gt_2048'
+        'pct_docs_gt_512', 'pct_docs_gt_1024', 'pct_docs_gt_2048',
+        'tokens_retained_512', 'tokens_retained_1024', 'tokens_retained_2048',
+        'token_retention_pct_512', 'token_retention_pct_1024', 'token_retention_pct_2048'
     ]
     
     with open(output_csv, 'w', newline='') as csvfile:
