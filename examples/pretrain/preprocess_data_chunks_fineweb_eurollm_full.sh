@@ -20,7 +20,7 @@ fi
 
 # Step 2: Process chunks in parallel
 echo "Processing chunks with EuroLLM tokenizer..."
-PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH python ../../preprocess_chunks_parallel.py \
+PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH python3 /home/ubuntu/preprocessing/Ling-V2/examples/pretrain/preprocess_chunks_parallel.py \
     --chunks-dir ${CHUNKS_DIR} \
     --output-prefix eurollm_processed_data_chunks \
     --tokenizer-type Llama2Tokenizer \
