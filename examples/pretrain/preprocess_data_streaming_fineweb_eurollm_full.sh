@@ -12,7 +12,7 @@ PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH python ../../preprocess_large_parquet.py
     --output-prefix eurollm_processed_data_streaming \
     --tokenizer-type Llama2Tokenizer \
     --tokenizer-model ${TOKENIZER_PATH} \
-    --batch-size 100000 \
+    --batch-size 1000000 \
     --append-eod \
     --log-interval 10
 
