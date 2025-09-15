@@ -262,16 +262,14 @@ def main():
         
         print(f"Successfully processed {len(chunk_prefixes)} chunks")
         
-        # Merge the results
-        merge_chunk_outputs(chunk_prefixes, args.output_prefix, 
-                           args.json_keys, tokenizer_args)
-        
+        # Files are left in chunks - no merging performed
         total_time = time.time() - start_time
         
         print(f"Chunk-based parallel preprocessing completed!")
         print(f"Total time: {total_time:.1f} seconds")
         print(f"Processed {len(chunk_files)} chunks")
         print(f"Average time per chunk: {total_time/len(chunk_files):.1f} seconds")
+        print(f"Files left in chunks - no final merging performed")
         
         return 0
         
