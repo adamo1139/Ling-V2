@@ -595,25 +595,28 @@ class DCPConverter:
 
     def copy_model_config_module(self, dst=None):
         dst = dst if dst is not None else self.dst
-        try:
-            import configuration_bailing_moe_v2
-        except:
-            print('cannot find module configuration_bailing_moe_v2, skip copy!')
-            return
-        shutil.copy2(configuration_bailing_moe_v2.__file__, dst)
+        
+        # Get the script directory and construct path to bailing_arch_files
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ling_v2_dir = os.path.dirname(script_dir)  # Go up from tools/ to Ling-V2/
+        bailing_arch_dir = os.path.join(ling_v2_dir, 'bailing_arch_files')
+        
+        # Copy configuration file
+        config_src = os.path.join(bailing_arch_dir, 'configuration_bailing_moe_v2.py')
+        if os.path.exists(config_src):
+            shutil.copy2(config_src, dst)
+            print(f'Copied configuration_bailing_moe_v2.py from {config_src}')
+        else:
+            print(f'Warning: configuration_bailing_moe_v2.py not found at {config_src}')
+            
+        # Copy modeling file
+        modeling_src = os.path.join(bailing_arch_dir, 'modeling_bailing_moe_v2.py')
+        if os.path.exists(modeling_src):
+            shutil.copy2(modeling_src, dst)
+            print(f'Copied modeling_bailing_moe_v2.py from {modeling_src}')
+        else:
+            print(f'Warning: modeling_bailing_moe_v2.py not found at {modeling_src}')
 
-    def copy_tokenization_bailing_module(self, dst=None):
-        dst = dst if dst is not None else self.dst
-        try:
-            from antllm.models.bailing import  tokenization_bailing
-            from antllm.models.bailing import chat_format
-        except:
-            print('cannot find module antllm.models.bailing_moe.tokenization_bailing, skip copy!')
-            print('cannot find module antllm.models.bailing_moe.chat_format, skip copy!')
-
-            return
-        shutil.copy2(tokenization_bailing.__file__, dst)
-        shutil.copy2(chat_format.__file__, dst)
 
 
 if __name__ == '__main__':
@@ -641,10 +644,8 @@ if __name__ == '__main__':
         converter.copy_tokenizer_config()
         converter.write_config()
         converter.copy_model_config_module()
-        converter.copy_tokenization_bailing_module()
         if args.mtp_path:
             converter.rewrite_mtp(args.mtp_path)
             converter.write_mtp_config(args.mtp_path)
             converter.copy_tokenizer_config(args.mtp_path)
             converter.copy_model_config_module(args.mtp_path)
-            converter.copy_tokenization_bailing_module(args.mtp_path)
