@@ -1,3 +1,8 @@
+import sys
+# Add Megatron to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'Megatron-LM-core_v0.13.0')))
+
+
 import glob, os, argparse
 from megatron.core.datasets import indexed_dataset
 from megatron.training.tokenizer import build_tokenizer
@@ -29,10 +34,10 @@ builder.finalize(args.out_prefix + ".idx")
 print("Wrote:", args.out_prefix + "_text_document.{bin,idx}")
 
 """
-python merge_indexed_datasets.py \
+python3 merge_tokenized_dataset.py \
   --shard_glob "/home/ubuntu/preprocessing/Ling-V2/tokenized_apt4/*_text_document.idx" \
   --out_prefix "/home/ubuntu/preprocessing/Ling-V2/apt4_merged_text_document" \
   --tokenizer-type HuggingFaceTokenizer \
-  --tokenizer-model /home/ubuntu/preprocessing/Ling-V2/resource/tokenizer/apt4
+  --tokenizer-model /home/ubuntu/preprocessing/Ling-V2/resource/tokenizer/config_pretrain
 
 """
