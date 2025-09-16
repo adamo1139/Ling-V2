@@ -1,9 +1,9 @@
-import sys
+import sys, glob, os, argparse
 # Add Megatron to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'Megatron-LM-core_v0.13.0')))
 
 
-import glob, os, argparse
+
 from megatron.core.datasets import indexed_dataset
 from megatron.training.tokenizer import build_tokenizer
 from megatron.training.arguments import _add_tokenizer_args
