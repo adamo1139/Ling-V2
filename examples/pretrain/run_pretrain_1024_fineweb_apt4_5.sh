@@ -75,7 +75,7 @@ MOE_ARGS=(
     --num-experts 16
     --moe-ffn-hidden-size 2048
     --moe-router-score-function sigmoid
-    --moe-router-topk 8
+    --moe-router-topk 2
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 2
@@ -97,7 +97,6 @@ GPT_MODEL_ARGS=(
     --num-attention-heads 8
     --num-query-groups 8
     --group-query-attention
-    --qk-layernorm
     --use-flash-attn
     --max-position-embeddings 2048
     --vocab-size 32000
@@ -132,7 +131,7 @@ TRAINING_ARGS=(
     --fp8-recipe "blockwise"
     --fp8-format "e4m3"
 
-    --optimizer "adam"
+    --optimizer "adamw"
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
@@ -176,8 +175,6 @@ EVAL_AND_LOGGING_ARGS=(
 
 KERNEL_ARGS=(
     --attention-backend flash
-    --no-masked-softmax-fusion
-    --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
 )
 
