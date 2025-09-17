@@ -90,7 +90,7 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 16
+    --num-layers 4
     --hidden-size 2048
     --ffn-hidden-size 1024
     --num-attention-heads 16
@@ -115,7 +115,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 2
+    --micro-batch-size 8
     --global-batch-size 128
     --seq-length 2048
     --train-iters 167
