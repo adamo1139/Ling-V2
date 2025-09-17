@@ -72,7 +72,7 @@ MOE_ARGS=(
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
     --num-experts 128
-    --moe-ffn-hidden-size 2048
+    --moe-ffn-hidden-size 1536
     --moe-router-score-function sigmoid
     --moe-router-topk 2
     --moe-router-enable-expert-bias
