@@ -182,7 +182,7 @@ EVAL_AND_LOGGING_ARGS=(
 )
 
 KERNEL_ARGS=(
-    --attention-backend flash
+    --attention-backend fused
     --no-masked-softmax-fusion
     --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
