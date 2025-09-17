@@ -71,7 +71,7 @@ MOE_ARGS=(
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
-    --num-experts 32
+    --num-experts 64
     --moe-ffn-hidden-size 2048
     --moe-router-score-function sigmoid
     --moe-router-topk 2
@@ -115,7 +115,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 16
+    --micro-batch-size 8
     --global-batch-size 128
     --seq-length 4096
     --train-iters 167
