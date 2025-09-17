@@ -133,7 +133,7 @@ TRAINING_ARGS=(
     --fp8-recipe "blockwise"
     --fp8-format "e4m3"
 
-    --optimizer "adamw-bnb-8bit"
+    --optimizer "adam"
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
@@ -148,13 +148,8 @@ MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 1
     --sequence-parallel
-    --use-distributed-optimizer
     --recompute-granularity selective
     --recompute-modules moe
-    
-    --overlap-param-gather
-    --overlap-grad-reduce
-
 )
 
 DATA_ARGS=(
