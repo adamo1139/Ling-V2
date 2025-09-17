@@ -65,10 +65,11 @@ if [ "$DEVICE_MODEL" = "NVIDIA GeForce RTX 3090 Ti" ] || [ "$DEVICE_MODEL" = "A1
 fi
 
 MOE_ARGS=(
+    --moe-enable-deepep
     --expert-model-parallel-size 1
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
-    --moe-token-dispatcher-type alltoall
+    --moe-token-dispatcher-type flex
     --moe-router-dtype fp32
     --num-experts 64
     --moe-ffn-hidden-size 256
