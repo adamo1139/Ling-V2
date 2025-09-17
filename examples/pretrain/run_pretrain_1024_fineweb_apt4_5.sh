@@ -115,7 +115,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 16
+    --micro-batch-size 64
     --global-batch-size 512
     --seq-length 1024
     --train-iters 167
@@ -179,7 +179,7 @@ EVAL_AND_LOGGING_ARGS=(
 )
 
 KERNEL_ARGS=(
-    --attention-backend auto
+    --attention-backend flash
     --no-masked-softmax-fusion
     --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
