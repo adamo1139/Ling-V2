@@ -71,7 +71,7 @@ MOE_ARGS=(
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
-    --moe-router-dtype fp32
+    --moe-router-dtype bf16
     --num-experts 128
     --moe-ffn-hidden-size 256
     --moe-router-score-function sigmoid
