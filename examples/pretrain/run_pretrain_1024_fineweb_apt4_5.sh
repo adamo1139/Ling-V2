@@ -66,7 +66,7 @@ fi
 
 MOE_ARGS=(
     --expert-model-parallel-size 1
-    --expert-tensor-parallel-size 1
+    --expert-tensor-parallel-size 2
     --moe-grouped-gemm
     --moe-token-dispatcher-type flex
     --moe-router-dtype fp32
