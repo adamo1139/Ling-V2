@@ -66,10 +66,10 @@ fi
 
 MOE_ARGS=(
     --moe-enable-deepep
-    --expert-model-parallel-size 1
+    --expert-model-parallel-size 2
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
-    --moe-token-dispatcher-type alltoall
+    --moe-token-dispatcher-type flex
     --moe-router-dtype fp32
     --num-experts 64
     --moe-ffn-hidden-size 256
