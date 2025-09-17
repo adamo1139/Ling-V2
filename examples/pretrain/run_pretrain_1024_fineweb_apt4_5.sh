@@ -127,7 +127,7 @@ TRAINING_ARGS=(
     
     --bf16
 
-    --optimizer "adamw"
+    --optimizer "adam"
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
