@@ -130,7 +130,7 @@ TRAINING_ARGS=(
     --fp8-recipe "blockwise"
     --fp8-format "e4m3"
 
-    --optimizer "adam-bnb-8bit"
+    --optimizer "adamw-bnb-8bit"
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
