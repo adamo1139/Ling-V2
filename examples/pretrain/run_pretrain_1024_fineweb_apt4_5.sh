@@ -73,7 +73,7 @@ MOE_ARGS=(
     --num-experts 64
     --moe-ffn-hidden-size 256
     --moe-router-score-function sigmoid
-    --moe-router-topk 8
+    --moe-router-topk 2
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
@@ -90,7 +90,7 @@ MPT_ARGS=(
 
 GPT_MODEL_ARGS=(
     --num-layers 20
-    --hidden-size 1024
+    --hidden-size 2048
     --ffn-hidden-size 2560
     --num-attention-heads 32
     --num-query-groups 8
