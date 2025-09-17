@@ -39,7 +39,6 @@ LOG_PATH="${JOB_DIR}/log_${NODE_RANK}.txt"
 
 export OMP_NUM_THREADS=1
 export CUDA_DEVICE_MAX_CONNECTIONS=32
-export TORCH_NCCL_AVOID_RECORD_STREAMS="1"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 export NCCL_NVLS_ENABLE=0
 export NCCL_CUMEM_ENABLE=0
@@ -78,8 +77,8 @@ MOE_ARGS=(
     --moe-router-topk 2
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
-    --moe-router-num-groups 2
-    --moe-router-group-topk 2
+    --moe-router-num-groups 1
+    --moe-router-group-topk 1
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
     --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
