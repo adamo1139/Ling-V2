@@ -155,7 +155,6 @@ MODEL_PARALLEL_ARGS=(
     --overlap-param-gather
     --overlap-grad-reduce
 
-    --moe-router-padding-for-fp8
 )
 
 DATA_ARGS=(
