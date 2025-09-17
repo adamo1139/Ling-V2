@@ -129,7 +129,6 @@ TRAINING_ARGS=(
     
     --bf16
 
-    --fp8-param-gather
     --fp8-recipe "blockwise"
     --fp8-format "e4m3"
 
