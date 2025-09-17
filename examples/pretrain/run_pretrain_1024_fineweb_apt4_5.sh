@@ -66,7 +66,7 @@ fi
 
 MOE_ARGS=(
     --expert-model-parallel-size 1
-    --expert-tensor-parallel-size 2
+    --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
@@ -127,7 +127,7 @@ TRAINING_ARGS=(
     
     --bf16
 
-    --optimizer "adamw-bnb-8bit"
+    --optimizer "adamw"
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
