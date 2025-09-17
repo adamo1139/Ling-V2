@@ -44,9 +44,9 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 export NCCL_NVLS_ENABLE=0
 export NCCL_CUMEM_ENABLE=0
 
-export NVTE_FLASH_ATTN=0
+export NVTE_FLASH_ATTN=1
 export NVTE_FUSED_ATTN=0
-export NVTE_UNFUSED_ATTN=1
+export NVTE_UNFUSED_ATTN=0
 
 export NVTE_DEBUG=1
 export NVTE_DEBUG_LEVEL=2  # 2 means DEBUG level
@@ -117,7 +117,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 1
+    --micro-batch-size 4
     --global-batch-size 512
     --seq-length 4096
     --train-iters 167
@@ -179,7 +179,7 @@ EVAL_AND_LOGGING_ARGS=(
 )
 
 KERNEL_ARGS=(
-    --attention-backend unfused
+    --attention-backend flash
     --no-masked-softmax-fusion
     --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
