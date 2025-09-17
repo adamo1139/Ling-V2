@@ -117,7 +117,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 4
+    --micro-batch-size 1
     --global-batch-size 512
     --seq-length 4096
     --train-iters 167
