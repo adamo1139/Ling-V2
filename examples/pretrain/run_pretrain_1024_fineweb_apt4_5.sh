@@ -81,7 +81,7 @@ MOE_ARGS=(
     --moe-router-group-topk 1
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
-    --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1]
+    --moe-layer-freq [1,1,1,1]
     --bias-zero-mean-update
 )
 
@@ -90,7 +90,7 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 12
+    --num-layers 4
     --hidden-size 2048
     --ffn-hidden-size 1024
     --num-attention-heads 16
