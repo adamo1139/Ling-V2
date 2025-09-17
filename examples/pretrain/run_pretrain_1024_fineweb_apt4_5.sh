@@ -71,8 +71,8 @@ MOE_ARGS=(
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
-    --num-experts 16
-    --moe-ffn-hidden-size 2048
+    --num-experts 32
+    --moe-ffn-hidden-size 1536
     --moe-router-score-function sigmoid
     --moe-router-topk 2
     --moe-router-enable-expert-bias
@@ -90,7 +90,7 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 16
+    --num-layers 12
     --hidden-size 1536
     --ffn-hidden-size 1024
     --num-attention-heads 12
@@ -134,7 +134,7 @@ TRAINING_ARGS=(
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
-    --lr-warmup-iters 10
+    --lr-warmup-iters 1
     --seed 42
 
     --manual-gc
