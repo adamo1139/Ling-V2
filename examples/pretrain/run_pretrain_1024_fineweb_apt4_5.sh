@@ -151,7 +151,6 @@ MODEL_PARALLEL_ARGS=(
     --recompute-granularity selective
     --recompute-modules moe
     
-    --overlap-param-gather
     --overlap-grad-reduce
 
 )
