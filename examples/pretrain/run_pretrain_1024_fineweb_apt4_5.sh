@@ -129,6 +129,10 @@ TRAINING_ARGS=(
     
     --bf16
 
+    --fp8-param-gather
+    --fp8-recipe "blockwise"
+    --fp8-format "e4m3"
+
     --optimizer "adamw-bnb-8bit"
     --lr "7.0e-4"
     --lr-decay-style cosine
@@ -150,6 +154,8 @@ MODEL_PARALLEL_ARGS=(
     
     --overlap-param-gather
     --overlap-grad-reduce
+
+    --moe-router-padding-for-fp8
 )
 
 DATA_ARGS=(
