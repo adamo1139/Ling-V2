@@ -179,7 +179,7 @@ EVAL_AND_LOGGING_ARGS=(
 )
 
 KERNEL_ARGS=(
-    --attention-backend auto
+    --attention-backend unfused
     --no-masked-softmax-fusion
     --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
