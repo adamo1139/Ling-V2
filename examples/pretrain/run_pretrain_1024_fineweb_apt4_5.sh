@@ -97,7 +97,7 @@ GPT_MODEL_ARGS=(
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 1024
+    --max-position-embeddings 4096
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
