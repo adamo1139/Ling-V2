@@ -92,7 +92,7 @@ GPT_MODEL_ARGS=(
     --num-layers 20
     --hidden-size 2048
     --ffn-hidden-size 2560
-    --num-attention-heads 32
+    --num-attention-heads 16
     --num-query-groups 8
     --group-query-attention
     --qk-layernorm
@@ -127,7 +127,7 @@ TRAINING_ARGS=(
     
     --bf16
 
-    --optimizer "adam"
+    --optimizer "adamw-bnb-8bit"
     --lr "7.0e-4"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
