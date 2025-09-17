@@ -148,7 +148,6 @@ MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 1
     --sequence-parallel
-    --use-distributed-optimizer
     --recompute-granularity selective
     --recompute-modules moe
     
