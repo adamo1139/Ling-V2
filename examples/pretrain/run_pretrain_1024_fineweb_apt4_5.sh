@@ -110,7 +110,7 @@ GPT_MODEL_ARGS=(
     --normalization "RMSNorm"
     --norm-epsilon "1e-06"
     --disable-bias-linear
-    --transformer-impl "local"
+    --transformer-impl "transformer_engine"
     --attention-dropout 0
     --hidden-dropout 0
 )
