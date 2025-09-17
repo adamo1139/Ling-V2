@@ -38,7 +38,7 @@ LAUNCHER=" \
 LOG_PATH="${JOB_DIR}/log_${NODE_RANK}.txt"
 
 export OMP_NUM_THREADS=1
-export CUDA_DEVICE_MAX_CONNECTIONS=1
+export CUDA_DEVICE_MAX_CONNECTIONS=32
 export TORCH_NCCL_AVOID_RECORD_STREAMS="1"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 export NCCL_NVLS_ENABLE=0
@@ -73,7 +73,7 @@ MOE_ARGS=(
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
     --num-experts 16
-    --moe-ffn-hidden-size 256
+    --moe-ffn-hidden-size 4096
     --moe-router-score-function sigmoid
     --moe-router-topk 8
     --moe-router-enable-expert-bias
@@ -99,7 +99,7 @@ GPT_MODEL_ARGS=(
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 16384
+    --max-position-embeddings 4096
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
@@ -119,7 +119,7 @@ GPT_MODEL_ARGS=(
 TRAINING_ARGS=(
     --micro-batch-size 4
     --global-batch-size 128
-    --seq-length 16384
+    --seq-length 4096
     --train-iters 167
     --weight-decay 0.1
     --adam-beta1 0.9
@@ -146,9 +146,6 @@ TRAINING_ARGS=(
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 1
-    --sequence-parallel
-    --recompute-granularity selective
-    --recompute-modules moe
 )
 
 DATA_ARGS=(
