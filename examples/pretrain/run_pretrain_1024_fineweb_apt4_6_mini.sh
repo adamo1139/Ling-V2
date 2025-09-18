@@ -116,9 +116,9 @@ GPT_MODEL_ARGS=(
 
 TRAINING_ARGS=(
     --micro-batch-size 4
-    --global-batch-size 128
+    --global-batch-size 16
     --seq-length 32768
-    --train-iters 1200
+    --train-iters 10000
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -131,9 +131,9 @@ TRAINING_ARGS=(
     --fp8-format "e4m3"
 
     --optimizer "adamw-bnb-8bit"
-    --lr "1.0e-3"
+    --lr "1.5e-3"
     --lr-decay-style cosine
-    --min-lr "3.0e-5"
+    --min-lr "5.0e-4"
     --lr-warmup-iters 1
     --seed 42
 
@@ -157,8 +157,8 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 300 
-    --eval-interval 10000 
+    --save-interval 3000 
+    --eval-interval 100000 
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
     --async-save
