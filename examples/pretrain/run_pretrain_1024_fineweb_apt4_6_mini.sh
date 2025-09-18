@@ -2,7 +2,7 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="szypulka_06b"
+JOB_DIR="szypulka_06b_2"
 DATA_PATH="szypulka_tokenized_apt4_merged/apt4_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
@@ -96,12 +96,13 @@ GPT_MODEL_ARGS=(
     --num-attention-heads 4
     --num-query-groups 2
     --group-query-attention
+    --qk-layernorm
     --use-flash-attn
     --max-position-embeddings 32768
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
-    --rotary-base 10000000
+    --rotary-base 600000
     --rotary-percent 0.5
     --rotary-scaling-factor 40
     --swiglu
@@ -144,6 +145,11 @@ TRAINING_ARGS=(
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 1
+    --use-distributed-optimizer
+    --recompute-granularity selective
+    --recompute-modules moe
+    --overlap-param-gather
+    --overlap-grad-reduce
 )
 
 DATA_ARGS=(
@@ -157,7 +163,7 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 3000 
+    --save-interval 200 
     --eval-interval 100000 
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
@@ -174,6 +180,8 @@ EVAL_AND_LOGGING_ARGS=(
 
 KERNEL_ARGS=(
     --attention-backend flash
+    --no-masked-softmax-fusion
+    --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
 )
 
