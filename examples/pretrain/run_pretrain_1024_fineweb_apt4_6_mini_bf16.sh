@@ -2,7 +2,7 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="szypulka_06b_4_bf16"
+JOB_DIR="szypulka_06b_5_bf16"
 DATA_PATH="szypulka_tokenized_apt4_merged/apt4_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
@@ -81,7 +81,7 @@ MOE_ARGS=(
     --moe-router-group-topk 2
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
-    --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1]
     --bias-zero-mean-update
 )
 
@@ -90,11 +90,11 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 20
-    --hidden-size 512
-    --ffn-hidden-size 512
+    --num-layers 12
+    --hidden-size 768
+    --ffn-hidden-size 128
     --num-attention-heads 4
-    --num-query-groups 2
+    --num-query-groups 6
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
@@ -134,17 +134,13 @@ TRAINING_ARGS=(
     --min-lr "5.0e-4"
     --lr-warmup-iters 10
     --seed 42
-
-    --manual-gc
-    --manual-gc-interval 800
 )
 
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 1
     --use-distributed-optimizer
-    --recompute-granularity selective
-    --recompute-modules moe
+
     --overlap-param-gather
     --overlap-grad-reduce
 )
