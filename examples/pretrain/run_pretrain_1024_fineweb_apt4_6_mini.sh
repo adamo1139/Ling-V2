@@ -2,8 +2,8 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="pretrain_1024_fineweb_apt4_6"
-DATA_PATH="szypulka_tokenized_apt4_merged_"
+JOB_DIR="szypulka_06b"
+DATA_PATH="szypulka_tokenized_apt4_merged"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 
