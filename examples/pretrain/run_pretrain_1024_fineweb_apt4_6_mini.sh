@@ -2,7 +2,7 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="pretrain_1024_fineweb_apt4_5"
+JOB_DIR="pretrain_1024_fineweb_apt4_6"
 DATA_PATH="apt4_processed_data_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
@@ -72,7 +72,7 @@ MOE_ARGS=(
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
     --num-experts 256
-    --moe-ffn-hidden-size 256
+    --moe-ffn-hidden-size 128
     --moe-router-score-function sigmoid
     --moe-router-topk 4
     --moe-router-enable-expert-bias
@@ -91,9 +91,9 @@ MPT_ARGS=(
 
 GPT_MODEL_ARGS=(
     --num-layers 12
-    --hidden-size 1024
-    --ffn-hidden-size 1024
-    --num-attention-heads 8
+    --hidden-size 512
+    --ffn-hidden-size 512
+    --num-attention-heads 4
     --num-query-groups 2
     --group-query-attention
     --use-flash-attn
@@ -115,7 +115,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 2
+    --micro-batch-size 4
     --global-batch-size 128
     --seq-length 32768
     --train-iters 167
