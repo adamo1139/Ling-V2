@@ -81,7 +81,7 @@ MOE_ARGS=(
     --moe-router-group-topk 1
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
-    --moe-layer-freq [1,1,1,1,1,1,1,1]
+    --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1]
     --bias-zero-mean-update
 )
 
