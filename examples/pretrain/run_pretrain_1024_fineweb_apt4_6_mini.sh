@@ -3,7 +3,7 @@ set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
 JOB_DIR="pretrain_1024_fineweb_apt4_6"
-DATA_PATH="apt4_processed_data_text_document"
+DATA_PATH="szypulka_tokenized_apt4_merged_"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 
@@ -101,7 +101,7 @@ GPT_MODEL_ARGS=(
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
-    --rotary-base 10000
+    --rotary-base 10000000
     --rotary-percent 0.5
     --rotary-scaling-factor 40
     --swiglu
@@ -118,7 +118,7 @@ TRAINING_ARGS=(
     --micro-batch-size 4
     --global-batch-size 128
     --seq-length 32768
-    --train-iters 167
+    --train-iters 1200
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -131,7 +131,7 @@ TRAINING_ARGS=(
     --fp8-format "e4m3"
 
     --optimizer "adamw-bnb-8bit"
-    --lr "7.0e-4"
+    --lr "1.0e-3"
     --lr-decay-style cosine
     --min-lr "3.0e-5"
     --lr-warmup-iters 1
@@ -158,7 +158,7 @@ DATA_ARGS=(
 
 EVAL_AND_LOGGING_ARGS=(
     --save-interval 300 
-    --eval-interval 1000 
+    --eval-interval 10000 
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
     --async-save
