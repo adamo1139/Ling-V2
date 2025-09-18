@@ -93,8 +93,8 @@ GPT_MODEL_ARGS=(
     --num-layers 12
     --hidden-size 768
     --ffn-hidden-size 128
-    --num-attention-heads 4
-    --num-query-groups 6
+    --num-attention-heads 6
+    --num-query-groups 2
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
