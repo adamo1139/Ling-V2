@@ -43,8 +43,8 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 export NCCL_NVLS_ENABLE=0
 export NCCL_CUMEM_ENABLE=0
 
-export NVTE_FLASH_ATTN=0
-export NVTE_FUSED_ATTN=1
+export NVTE_FLASH_ATTN=1
+export NVTE_FUSED_ATTN=0
 export NVTE_UNFUSED_ATTN=0
 
 export NVTE_DEBUG=1
@@ -125,8 +125,6 @@ TRAINING_ARGS=(
     --adam-beta2 0.95
     --init-method-std 0.02
     --clip-grad 1.0
-    
-    --bf16
 
     --fp8-param-gather
     --fp8-recipe "blockwise"
@@ -176,7 +174,7 @@ EVAL_AND_LOGGING_ARGS=(
 )
 
 KERNEL_ARGS=(
-    --attention-backend fused
+    --attention-backend flash
     --no-masked-softmax-fusion
     --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
