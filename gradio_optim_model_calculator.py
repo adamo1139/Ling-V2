@@ -210,6 +210,20 @@ def calculate_model_sizes(
         # FLOPs per token across all layers (non-embedding M)
         M_token = num_layers * flops_token_layer
 
+        # Component-wise FLOPs across all layers for mix analysis
+        attn_flops_total = num_layers * 2 * macs_attn_token_layer
+        ffn_flops_total = num_layers * 2 * macs_moe_token_layer
+        router_flops_total = num_layers * 2 * macs_router_token_layer
+        denom_ffn_attn = (attn_flops_total + ffn_flops_total)
+        attn_ffn_ratio = (attn_flops_total / denom_ffn_attn) if denom_ffn_attn > 0 else 0.0
+        # Status per Ling: 30–40% stable; 20–50% minor impact
+        if 0.30 <= attn_ffn_ratio <= 0.40:
+            attn_ffn_status = "within 30–40% stable range"
+        elif 0.20 <= attn_ffn_ratio <= 0.50:
+            attn_ffn_status = "within broader 20–50% tolerance"
+        else:
+            attn_ffn_status = "outside recommended range"
+
         # Optional embedding compute per token (projection to vocab)
         # MACs: H * V (logits); FLOPs_emb = 2 * H * V
         flops_embed_token = 2 * hidden_size * vocab_size if include_embedding_in_flops else 0
@@ -261,6 +275,16 @@ def calculate_model_sizes(
         exponent_on_A = alpha + gamma_coef * (log10G ** 2) + beta_coef * log10G
         el_joint = (A_hat ** exponent_on_A) if A_hat > 0 else 0.0
 
+        # Optimal learning rate and batch size from total compute C
+        # Nopt = 1.1576 * C^(-0.1529)
+        # Bopt = 0.0694 * C^(0.3644)
+        if total_training_cost > 0:
+            lr_opt = 1.1576 * (total_training_cost ** (-0.1529))
+            batch_opt = 0.0694 * (total_training_cost ** 0.3644)
+        else:
+            lr_opt = 0.0
+            batch_opt = 0.0
+
         return {
             'total_params': total_params,
             'embed_params': embed_params,
@@ -288,6 +312,11 @@ def calculate_model_sizes(
             'total_tokens': total_tokens,
             'total_training_cost': total_training_cost,
             'total_train_flops_with_bwd': total_train_flops_with_bwd,
+            'attn_flops_total': attn_flops_total,
+            'ffn_flops_total': ffn_flops_total,
+            'router_flops_total': router_flops_total,
+            'attn_ffn_ratio': attn_ffn_ratio,
+            'attn_ffn_status': attn_ffn_status,
             'hours_3090_ti': hours_3090_ti,
             'hours_h100_sxm5': hours_h100_sxm5,
             'Mopt_dense': Mopt_dense,
@@ -299,7 +328,9 @@ def calculate_model_sizes(
             'el_exponent_on_A': exponent_on_A,
             'el_A_used': A_hat,
             'el_G_used': G,
-            'mfu': mfu
+            'mfu': mfu,
+            'lr_opt': lr_opt,
+            'batch_opt': batch_opt
         }
 
     except (ValueError, ZeroDivisionError) as e:
@@ -347,10 +378,27 @@ def create_output_text(results):
     output += f"• Total Tokens D = B·L·steps: {format_number(results['total_tokens'])}\n"
     output += f"• Total Training Compute C = M·D: {format_flops(results['total_training_cost'])}\n\n"
 
+    # Attention vs FFN compute mix (Ling guidance)
+    if 'attn_flops_total' in results and 'ffn_flops_total' in results:
+        attn_share = results['attn_ffn_ratio'] * 100
+        ffn_share = 100 - attn_share
+        output += "⚖️ Attention vs FFN Compute Mix:\n"
+        output += f"• Attention FLOPs share (vs FFN): {attn_share:.1f}%\n"
+        output += f"• FFN FLOPs share: {ffn_share:.1f}%\n"
+        output += f"• Attention FLOPs (all layers): {format_flops(results['attn_flops_total'])}\n"
+        output += f"• FFN FLOPs (all layers): {format_flops(results['ffn_flops_total'])}\n"
+        output += f"• Status: {results['attn_ffn_status']} (Ling suggests 30–40% stable; 20–50% ok)\n\n"
+
     output += "🧭 Compute-Optimal (Table 1):\n"
     output += f"• Dense Mopt: {format_number(results['Mopt_dense'])} FLOPs/token, Dopt: {format_number(results['Dopt_dense'])} tokens\n"
     output += f"• MoE   Mopt: {format_number(results['Mopt_moe'])} FLOPs/token, Dopt: {format_number(results['Dopt_moe'])} tokens\n"
     output += "• Note: Mopt is non-embedding FLOPs/token (Ling).\n"
+
+    # Optimal learning rate and batch size derived from C
+    if results.get('lr_opt') is not None and results.get('batch_opt') is not None:
+        output += "\n🛠 Optimal Hyperparameters (from C):\n"
+        output += f"• Learning Rate (Nopt): {results['lr_opt']:.6f}\n"
+        output += f"• Batch Size (Bopt): {results['batch_opt']:.2f}\n"
 
     # EL (Eq. 13)
     el_joint = results.get('el_joint', None)
@@ -375,22 +423,22 @@ def create_output_text(results):
 def main():
     # Default values from the training script
     defaults = {
-        'num_layers': '20',
-        'hidden_size': '1024',
-        'vocab_size': '128000',
-        'num_attention_heads': '32',
-        'num_experts': '32',
-        'moe_ffn_hidden_size': '256',
+        'num_layers': '12',
+        'hidden_size': '768',
+        'vocab_size': '32000',
+        'num_attention_heads': '6',
+        'num_experts': '128',
+        'moe_ffn_hidden_size': '128',
         'moe_router_topk': '2',
         'moe_router_topk_scaling_factor': '2.5',
-        'moe_router_num_groups': '8',
-        'moe_router_group_topk': '8',
+        'moe_router_num_groups': '4',
+        'moe_router_group_topk': '2',
         'shared_experts': '0',
         'expert_granularity': '0',
-        'batch_size': '8',
-        'sequence_length': '1024',
-        'n_kv': '8',
-        'num_training_iterations': '1000000',
+        'batch_size': '16',
+        'sequence_length': '32768',
+        'n_kv': '2',
+        'num_training_iterations': '5000',
         'train_flops_multiplier': '3.0',
         'include_embedding_in_flops': False
     }
