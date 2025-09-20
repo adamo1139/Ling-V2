@@ -2,7 +2,7 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="poziomka_1"
+JOB_DIR="poziomka_2"
 DATA_PATH="szypulka_tokenized_apt4_merged/apt4_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
@@ -98,7 +98,7 @@ GPT_MODEL_ARGS=(
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 32768
+    --max-position-embeddings 16384
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
@@ -116,9 +116,9 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 4
-    --global-batch-size 64
-    --seq-length 32768
+    --micro-batch-size 16
+    --global-batch-size 128
+    --seq-length 16384
     --train-iters 50000
     --weight-decay 0.1
     --adam-beta1 0.9
