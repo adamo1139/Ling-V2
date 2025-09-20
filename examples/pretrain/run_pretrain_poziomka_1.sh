@@ -116,7 +116,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 8
+    --micro-batch-size 4
     --global-batch-size 64
     --seq-length 32768
     --train-iters 50000
@@ -138,7 +138,7 @@ TRAINING_ARGS=(
 
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
-    --tensor-model-parallel-size 8
+    --tensor-model-parallel-size 2
     --tp-comm-overlap
     --use-distributed-optimizer
     --sequence-parallel
