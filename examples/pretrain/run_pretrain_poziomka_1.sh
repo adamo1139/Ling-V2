@@ -67,7 +67,7 @@ fi
 
 MOE_ARGS=(
     --expert-model-parallel-size 1
-    --expert-tensor-parallel-size 2
+    --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type allgather
     --moe-router-dtype fp32
@@ -138,7 +138,7 @@ TRAINING_ARGS=(
 
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
-    --tensor-model-parallel-size 2
+    --tensor-model-parallel-size 4
     --tp-comm-overlap
     --use-distributed-optimizer
     --sequence-parallel
