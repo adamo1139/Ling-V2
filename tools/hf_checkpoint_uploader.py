@@ -32,7 +32,8 @@ from pathlib import Path
 from typing import Optional, List
 
 try:
-    from huggingface_hub import snapshot_upload, create_repo, HfApi
+    # Use upload_folder which is widely available. snapshot_upload is not present in many versions.
+    from huggingface_hub import upload_folder, create_repo, HfApi
 except Exception as e:
     print("ERROR: huggingface_hub is required. Install via 'pip install -U huggingface_hub'.", file=sys.stderr)
     raise
@@ -146,12 +147,12 @@ def upload_one(
     last_err: Optional[Exception] = None
     while attempt <= max_retries:
         try:
-            snapshot_upload(
-                local_dir=str(ckpt_dir),
+            upload_folder(
+                folder_path=str(ckpt_dir),
                 repo_id=repo_id,
                 repo_type="model",
-                allow_patterns=allow,
                 revision=revision,
+                allow_patterns=allow,
                 commit_message=msg,
             )
             print(f"Uploaded {iter_dir} ✓")
