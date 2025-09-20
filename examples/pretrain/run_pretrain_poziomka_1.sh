@@ -67,7 +67,7 @@ fi
 
 MOE_ARGS=(
     --expert-model-parallel-size 1
-    --expert-tensor-parallel-size 8
+    --expert-tensor-parallel-size 2
     --moe-grouped-gemm
     --moe-token-dispatcher-type allgather
     --moe-router-dtype fp32
@@ -116,7 +116,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 8
+    --micro-batch-size 2
     --global-batch-size 64
     --seq-length 32768
     --train-iters 50000
