@@ -204,6 +204,118 @@ def upload_one(
     raise RuntimeError(f"Failed to upload {iter_dir} after {max_retries} retries: {last_err}")
 
 
+def _scan_meta_files(ckpt_dir: Path, patterns: List[str], include_latest_file: bool) -> dict:
+    """Return a mapping relpath -> {"mtime": float, "size": int} for files matching patterns.
+
+    - patterns are treated as globs relative to ckpt_dir.
+    - include_latest_file: also include the latest tracker if it exists.
+    """
+    files: dict[str, dict] = {}
+    # Deduplicate via a set of relpaths
+    relpaths: set[str] = set()
+    for pat in patterns:
+        try:
+            for p in ckpt_dir.glob(pat):
+                if p.is_file():
+                    relpaths.add(str(p.relative_to(ckpt_dir)))
+        except Exception:
+            # Ignore bad patterns
+            continue
+    if include_latest_file:
+        lp = ckpt_dir / LATEST_FILE
+        if lp.is_file():
+            relpaths.add(LATEST_FILE)
+    for rp in relpaths:
+        full = ckpt_dir / rp
+        try:
+            st = full.stat()
+        except FileNotFoundError:
+            continue
+        files[rp] = {"mtime": st.st_mtime, "size": st.st_size}
+    return files
+
+
+def _diff_meta_snapshots(old: dict, new: dict) -> tuple[list[str], list[str]]:
+    """Return (changed_or_added, deleted) relpaths comparing old->new snapshots."""
+    changed: list[str] = []
+    deleted: list[str] = []
+    old_keys = set(old.keys())
+    new_keys = set(new.keys())
+    for rp in sorted(new_keys):
+        if rp not in old:
+            changed.append(rp)
+        else:
+            o = old[rp]
+            n = new[rp]
+            if o.get("mtime") != n.get("mtime") or o.get("size") != n.get("size"):
+                changed.append(rp)
+    for rp in sorted(old_keys - new_keys):
+        deleted.append(rp)
+    return changed, deleted
+
+
+def upload_metadata(
+    ckpt_dir: Path,
+    repo_id: str,
+    revision: str,
+    changed_paths: List[str],
+    deleted_paths: List[str],
+    max_retries: int,
+    retry_wait: int,
+    dry_run: bool = False,
+) -> None:
+    if not changed_paths and not deleted_paths:
+        return
+    # Build allow/delete patterns as explicit file paths; this narrows the commit to only changed files
+    allow = list(changed_paths)
+    delete = list(deleted_paths)
+    msg = (
+        f"Update metadata: +{len(allow)} files"
+        + (f", -{len(delete)} files" if delete else "")
+    )
+    print(
+        f"Uploading metadata to {repo_id}@{revision} (allow_paths={allow} delete_paths={delete}) ..."
+    )
+    if dry_run:
+        print("[dry-run] Skipping upload")
+        return
+    attempt = 0
+    last_err: Optional[Exception] = None
+    # Try with delete_patterns if supported by installed huggingface_hub version; fall back to no deletions
+    while attempt <= max_retries:
+        try:
+            try:
+                upload_folder(
+                    folder_path=str(ckpt_dir),
+                    repo_id=repo_id,
+                    repo_type="model",
+                    revision=revision,
+                    allow_patterns=allow if allow else None,
+                    delete_patterns=delete if delete else None,
+                    commit_message=msg,
+                )
+            except TypeError:
+                # Older versions may not support delete_patterns
+                upload_folder(
+                    folder_path=str(ckpt_dir),
+                    repo_id=repo_id,
+                    repo_type="model",
+                    revision=revision,
+                    allow_patterns=allow if allow else None,
+                    commit_message=msg,
+                )
+            print("Uploaded metadata ✓")
+            return
+        except Exception as e:
+            last_err = e
+            attempt += 1
+            if attempt > max_retries:
+                break
+            print(f"Metadata upload failed ({e}); retrying in {retry_wait}s ({attempt}/{max_retries})...")
+            time.sleep(retry_wait)
+    raise RuntimeError(f"Failed to upload metadata after {max_retries} retries: {last_err}")
+
+
 def main() -> int:
     args = parse_args()
 
@@ -243,14 +355,14 @@ def main() -> int:
     def loop_once() -> bool:
         nonlocal last_uploaded, state
         pending = find_pending()
-        if not pending:
-            return False
+        did_work = False
+        # If there are pending checkpoints, upload them and include metadata in the same commit
         for it in pending:
             iter_dir = ckpt_dir / format_iter_dir(it)
             if not iter_dir.exists():
                 # race: latest points to a dir that hasn't materialized yet
                 print(f"Pending {iter_dir} not found yet; will retry")
-                return False
+                return did_work
             upload_one(
                 ckpt_dir=ckpt_dir,
                 repo_id=args.repo_id,
@@ -265,8 +377,42 @@ def main() -> int:
             )
             last_uploaded = it
             state["last_uploaded_iteration"] = last_uploaded
+            # Refresh metadata snapshot after a checkpoint upload
+            if not args.no_meta:
+                new_snap = _scan_meta_files(
+                    ckpt_dir,
+                    args.meta_glob or [],
+                    include_latest_file=(not args.no_include_latest_file),
+                )
+                state["meta_snapshot"] = new_snap
             save_state(state_path, state)
-        return True
+            did_work = True
+
+        # If no pending checkpoints, check if metadata changed and push only metadata
+        if not pending and not args.no_meta:
+            old_snap: dict = state.get("meta_snapshot", {}) or {}
+            new_snap = _scan_meta_files(
+                ckpt_dir,
+                args.meta_glob or [],
+                include_latest_file=(not args.no_include_latest_file),
+            )
+            changed, deleted = _diff_meta_snapshots(old_snap, new_snap)
+            if changed or deleted:
+                upload_metadata(
+                    ckpt_dir=ckpt_dir,
+                    repo_id=args.repo_id,
+                    revision=args.revision,
+                    changed_paths=changed,
+                    deleted_paths=deleted,
+                    max_retries=args.max_retries,
+                    retry_wait=args.retry_wait,
+                    dry_run=args.dry_run,
+                )
+                state["meta_snapshot"] = new_snap
+                save_state(state_path, state)
+                did_work = True
+
+        return did_work
 
     if args.once:
         _ = loop_once()
