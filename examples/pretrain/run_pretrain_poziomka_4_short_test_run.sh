@@ -66,7 +66,7 @@ if [ "$DEVICE_MODEL" = "NVIDIA GeForce RTX 3090 Ti" ] || [ "$DEVICE_MODEL" = "A1
 fi
 
 MOE_ARGS=(
-    --expert-model-parallel-size 2
+    --expert-model-parallel-size 1
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
