@@ -163,7 +163,6 @@ EVAL_AND_LOGGING_ARGS=(
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
     --async-save
-    --eval-iters 2
     --log-interval 1
     --log-throughput
     --tensorboard-dir $TENSORBOARD_LOGS_PATH 
