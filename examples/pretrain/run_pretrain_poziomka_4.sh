@@ -2,7 +2,7 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="poziomka_4_short_test_run"
+JOB_DIR="poziomka_4"
 DATA_PATH="szypulka_tokenized_apt4_merged/apt4_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
