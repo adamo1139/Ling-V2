@@ -2,7 +2,7 @@
 set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
-JOB_DIR="poziomka_4"
+JOB_DIR="poziomka_4_short_test_run"
 DATA_PATH="szypulka_tokenized_apt4_merged/apt4_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
@@ -66,13 +66,13 @@ if [ "$DEVICE_MODEL" = "NVIDIA GeForce RTX 3090 Ti" ] || [ "$DEVICE_MODEL" = "A1
 fi
 
 MOE_ARGS=(
-    --expert-model-parallel-size 1
+    --expert-model-parallel-size 2
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
-    --moe-token-dispatcher-type allgather
+    --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
     --num-experts 128
-    --moe-ffn-hidden-size 256
+    --moe-ffn-hidden-size 320
     --moe-router-score-function sigmoid
     --moe-router-topk 2
     --moe-router-enable-expert-bias
@@ -81,7 +81,7 @@ MOE_ARGS=(
     --moe-router-group-topk 2
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
-    --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    --moe-layer-freq [1,1,1,1,1,1,1,1,1,1,1,1]
     --bias-zero-mean-update
 )
 
@@ -90,10 +90,10 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 14
-    --hidden-size 2048
-    --ffn-hidden-size 256
-    --num-attention-heads 16
+    --num-layers 12
+    --hidden-size 3072
+    --ffn-hidden-size 320
+    --num-attention-heads 24
     --num-query-groups 4
     --group-query-attention
     --qk-layernorm
@@ -119,7 +119,7 @@ TRAINING_ARGS=(
     --micro-batch-size 4
     --global-batch-size 80
     --seq-length 32768
-    --train-iters 48800
+    --train-iters 40000
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -139,8 +139,8 @@ TRAINING_ARGS=(
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 4
-    --tp-comm-overlap
     --use-distributed-optimizer
+    --tp-comm-overlap
     --sequence-parallel
     --overlap-param-gather
     --overlap-grad-reduce
@@ -157,8 +157,8 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 2500 
-    --eval-interval 2500 
+    --save-interval 2000
+    --eval-interval 2000 
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
