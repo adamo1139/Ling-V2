@@ -69,6 +69,7 @@ def parse_args() -> argparse.Namespace:
         default=[
             "logs/**",
             "log/**",
+            "log_*.txt",
             "*.log",
             "events.*",
             "wandb/**",
