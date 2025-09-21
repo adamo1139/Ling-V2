@@ -138,7 +138,7 @@ TRAINING_ARGS=(
 
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
-    --tensor-model-parallel-size 4
+    --tensor-model-parallel-size 8
     --tp-comm-overlap
     --use-distributed-optimizer
     --sequence-parallel
