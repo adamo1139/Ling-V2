@@ -14,7 +14,12 @@ Usage (run in a separate tmux session):
       --ckpt-dir poziomka_1 \
       --repo-id your-org/your-repo \
       --revision main \
-      --poll-interval 60
+      --poll-interval 60 \
+      --meta-glob logs/** --meta-glob wandb/**
+
+Notes:
+  - By default, the uploader also includes common metadata patterns (logs/**, wandb/**, *.log, etc.)
+    in each incremental commit. Use --no-meta to disable, or add more with repeated --meta-glob.
 
 Dependencies:
   pip install -U huggingface_hub hf_transfer
@@ -57,6 +62,33 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--retry-wait", default=15, type=int, help="Seconds to wait between retries (default: 15)")
     p.add_argument("--no-include-latest-file", action="store_true", help=f"Do not include {LATEST_FILE} in commits")
     p.add_argument("--dry-run", action="store_true", help="Do not upload; just print what would happen")
+    # Metadata/log uploads
+    p.add_argument(
+        "--meta-glob",
+        action="append",
+        default=[
+            "logs/**",
+            "log/**",
+            "*.log",
+            "events.*",
+            "wandb/**",
+            "tensorboard/**",
+            "mlruns/**",
+            "training_config*.json",
+            "run_*.sh",
+            "collect_env.txt",
+            "pip_list.txt",
+        ],
+        help=(
+            "Glob(s) relative to ckpt-dir for metadata to upload alongside each checkpoint. "
+            "Repeat flag to add more; defaults cover common logs/wandb/tensorboard."
+        ),
+    )
+    p.add_argument(
+        "--no-meta",
+        action="store_true",
+        help="Disable uploading metadata/logs; only upload checkpoint iteration folder",
+    )
     return p.parse_args()
 
 
@@ -133,11 +165,16 @@ def upload_one(
     max_retries: int,
     retry_wait: int,
     dry_run: bool = False,
+    meta_globs: Optional[List[str]] = None,
+    include_meta: bool = True,
 ) -> None:
     iter_dir = format_iter_dir(iteration)
     allow = [f"{iter_dir}/**"]
     if include_latest_file:
         allow.append(LATEST_FILE)
+    if include_meta and meta_globs:
+        # Add user-specified metadata patterns (relative to ckpt_dir)
+        allow.extend(meta_globs)
     msg = f"Add {iter_dir}"
     print(f"Uploading {iter_dir} to {repo_id}@{revision} (allow_patterns={allow}) ...")
     if dry_run:
@@ -223,6 +260,8 @@ def main() -> int:
                 max_retries=args.max_retries,
                 retry_wait=args.retry_wait,
                 dry_run=args.dry_run,
+                meta_globs=(args.meta_glob or []),
+                include_meta=(not args.no_meta),
             )
             last_uploaded = it
             state["last_uploaded_iteration"] = last_uploaded
