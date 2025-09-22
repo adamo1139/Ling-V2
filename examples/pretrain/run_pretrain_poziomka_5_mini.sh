@@ -145,7 +145,6 @@ MODEL_PARALLEL_ARGS=(
     --tensor-model-parallel-size 1
     --use-distributed-optimizer
     --tp-comm-overlap
-    --sequence-parallel
     --overlap-param-gather
     --overlap-grad-reduce
 )
