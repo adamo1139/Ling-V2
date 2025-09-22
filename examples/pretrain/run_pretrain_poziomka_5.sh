@@ -158,8 +158,8 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 1500
-    --eval-interval 1500
+    --save-interval 300
+    --eval-interval 300
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
