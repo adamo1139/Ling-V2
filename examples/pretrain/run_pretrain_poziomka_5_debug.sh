@@ -106,7 +106,7 @@ GPT_MODEL_ARGS=(
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
-    --rotary-base 600000
+    --rotary-base 84000
     --rotary-percent 0.5
     --rotary-scaling-factor 40
     --swiglu
@@ -121,7 +121,7 @@ GPT_MODEL_ARGS=(
 
 TRAINING_ARGS=(
     --micro-batch-size 8
-    --global-batch-size 512
+    --global-batch-size 256
     --seq-length 8192
     --train-iters 200
     --weight-decay 0.1
