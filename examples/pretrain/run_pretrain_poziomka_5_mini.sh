@@ -75,7 +75,7 @@ MOE_ARGS=(
     --moe-ffn-hidden-size 128
     --moe-shared-expert-intermediate-size 128
     --moe-router-score-function sigmoid
-    --moe-router-topk 8
+    --moe-router-topk 4
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
@@ -86,6 +86,7 @@ MOE_ARGS=(
     --bias-zero-mean-update
     --moe-expert-capacity-factor 1.25
     --moe-pad-expert-input-to-capacity
+    --moe-shared-expert-overlap
 )
 
 MPT_ARGS=(
@@ -122,7 +123,7 @@ TRAINING_ARGS=(
     --micro-batch-size 4
     --global-batch-size 80
     --seq-length 4096
-    --train-iters 40000
+    --train-iters 200
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -160,8 +161,8 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 2000
-    --eval-interval 2000 
+    --save-interval 50
+    --eval-interval 50 
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
