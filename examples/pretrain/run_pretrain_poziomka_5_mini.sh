@@ -144,7 +144,6 @@ MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 1
     --use-distributed-optimizer
-    --tp-comm-overlap
     --overlap-param-gather
     --overlap-grad-reduce
 )
