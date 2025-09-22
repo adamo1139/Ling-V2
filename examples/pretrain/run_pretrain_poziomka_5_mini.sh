@@ -137,7 +137,7 @@ TRAINING_ARGS=(
     --lr-decay-style cosine
     --min-lr "4.00e-5"
     --lr-warmup-iters 50
-    --seed 42
+    --seed 50
 )
 
 MODEL_PARALLEL_ARGS=(
