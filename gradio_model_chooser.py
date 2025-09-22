@@ -16,7 +16,6 @@ Notes:
 """
 
 import gradio as gr
-import math
 
 NUM_BYTES_IN_GIGABYTE = 1024 * 1024 * 1024
 
@@ -84,6 +83,9 @@ def calculate_model_sizes(
     num_attention_heads,
     num_experts,
     moe_ffn_hidden_size,
+    ffn_hidden_size,
+    shared_expert_intermediate_size,
+    num_moe_layers,
     moe_router_topk,
     moe_router_topk_scaling_factor,
     moe_router_num_groups,
@@ -106,6 +108,9 @@ def calculate_model_sizes(
         num_attention_heads = safe_int(num_attention_heads, 1)
         num_experts = safe_int(num_experts, 1)
         moe_ffn_hidden_size = safe_int(moe_ffn_hidden_size, 1)
+        ffn_hidden_size = safe_int(ffn_hidden_size, 1)
+        shared_expert_intermediate_size = safe_int(shared_expert_intermediate_size, 0)
+        num_moe_layers = safe_int(num_moe_layers, 0)
         moe_router_topk = safe_int(moe_router_topk, 1)
         moe_router_topk_scaling_factor = safe_float(moe_router_topk_scaling_factor, 1.0)
         moe_router_num_groups = safe_int(moe_router_num_groups, 0)
@@ -139,6 +144,8 @@ def calculate_model_sizes(
             raise ValueError("moe_router_group_topk must be <= moe_router_num_groups")
         if shared_experts < 0:
             raise ValueError("shared_experts must be >= 0")
+        if num_moe_layers < 0 or num_moe_layers > num_layers:
+            raise ValueError("num_moe_layers must be in [0, num_layers]")
         if not (0 < mfu <= 1.0):
             raise ValueError("MFU must be in (0, 1]")
 
@@ -153,13 +160,20 @@ def calculate_model_sizes(
             raise ValueError("Derived expert hidden size must be positive")
         d_expert = max(64, int(round(d_expert / 8)) * 8)  # kernel-friendly
 
-        # Grouped-query attention factor g = n_kv / n_heads
-        g = n_kv / num_attention_heads
+        # Dense FFN hidden size (kernel-friendly)
+        d_dense = max(64, int(round(max(1, ffn_hidden_size) / 8)) * 8)
+
+        # Shared expert hidden size (kernel-friendly) — optional
+        d_shared = max(0, shared_expert_intermediate_size)
+        if d_shared:
+            d_shared = max(64, int(round(d_shared / 8)) * 8)
+
+        # Grouped-query attention factor g = n_kv / n_heads (not used directly)
 
         # Effective activated experts per token (routable + shared)
         ea = moe_router_topk
         es = shared_experts
-        e_total = num_experts + es
+        e_total = num_experts + es if num_moe_layers > 0 else 0
         activation_ratio = (ea + es) / e_total if e_total > 0 else 0.0
 
         # Embeddings + LM head params (untied): V*H + H*V; include final RMSNorm (H)
@@ -176,27 +190,47 @@ def calculate_model_sizes(
         attn_params_per_layer = attn_qkv_weight + attn_out_weight + attn_qk_norm + layer_rmsnorms
         attn_params = num_layers * attn_params_per_layer
 
-        # MoE expert params per layer (SwiGLU: 3 * H * d_expert per expert)
-        moe_expert_params_per_layer = num_experts * (3 * hidden_size * d_expert)
-        moe_expert_params = num_layers * moe_expert_params_per_layer
+        # Layer-type split
+        num_dense_layers = max(0, num_layers - num_moe_layers)
 
-        # Router params per layer: H -> E logits (+ bias)
+        # MoE expert params per MoE layer (SwiGLU: 3 * H * d per expert)
+        moe_expert_params_per_moe_layer = num_experts * (3 * hidden_size * d_expert)
+        moe_shared_params_per_moe_layer = shared_experts * (3 * hidden_size * d_shared) if d_shared and shared_experts > 0 else 0
+        moe_expert_params = num_moe_layers * moe_expert_params_per_moe_layer
+        moe_shared_params = num_moe_layers * moe_shared_params_per_moe_layer
+
+        # Dense FFN params per dense layer (SwiGLU-style approx)
+        dense_ffn_params_per_dense_layer = 3 * hidden_size * d_dense
+        dense_ffn_params = num_dense_layers * dense_ffn_params_per_dense_layer
+
+        # Router params per MoE layer: H -> E logits (+ bias)
         router_expert_bias = True
         router_params_per_layer = hidden_size * num_experts + (num_experts if router_expert_bias else 0)
-        router_params = num_layers * router_params_per_layer
+        router_params = num_moe_layers * router_params_per_layer
 
         # Total model params
-        total_params = embed_params + final_norm_params + attn_params + moe_expert_params + router_params
+        total_params = (
+            embed_params + final_norm_params + attn_params +
+            moe_expert_params + moe_shared_params + dense_ffn_params + router_params
+        )
 
         # Activated params per token (heuristic)
         activated_attn = attn_params
-        activated_router_per_layer = router_params_per_layer
-        activated_ffn_per_layer = (ea + es) * (3 * hidden_size * d_expert)
-        activated_ffn = num_layers * activated_ffn_per_layer
-        activated_router = num_layers * activated_router_per_layer
+        activated_router_per_moe_layer = router_params_per_layer
+        # Use d_shared for shared experts if provided; else fall back to d_expert
+        d_shared_eff = d_shared if d_shared else d_expert
+        activated_moe_ffn_per_moe_layer = 3 * hidden_size * (ea * d_expert + es * d_shared_eff)
+        activated_dense_ffn_per_dense_layer = 3 * hidden_size * d_dense
+        activated_ffn = (
+            num_moe_layers * activated_moe_ffn_per_moe_layer +
+            num_dense_layers * activated_dense_ffn_per_dense_layer
+        )
+        activated_router = num_moe_layers * activated_router_per_moe_layer
         total_activated = activated_attn + activated_router + activated_ffn
 
-        activated_ffn_ratio = (activated_ffn_per_layer * num_layers) / moe_expert_params if moe_expert_params > 0 else 0.0
+        activated_ffn_ratio = (
+            (num_moe_layers * activated_moe_ffn_per_moe_layer + num_dense_layers * activated_dense_ffn_per_dense_layer)
+        ) / (moe_expert_params + dense_ffn_params) if (moe_expert_params + dense_ffn_params) > 0 else 0.0
 
         # Memory (rough BF16)
         param_memory_gb = total_params * 2 / (1024**3)
@@ -206,17 +240,23 @@ def calculate_model_sizes(
         macs_attn_proj = attn_qkv_weight + attn_out_weight
         macs_attn_core = 2 * sequence_length * hidden_size
         macs_attn_token_layer = macs_attn_proj + macs_attn_core
-        macs_router_token_layer = hidden_size * num_experts
-        macs_moe_token_layer = 3 * (ea + es) * hidden_size * d_expert
+        macs_router_token_layer = hidden_size * num_experts  # only for MoE layers
+        macs_moe_token_layer = 3 * hidden_size * (ea * d_expert + es * d_shared_eff)
+        macs_dense_token_layer = 3 * hidden_size * d_dense
 
-        # FLOPs per token per layer, and across layers (non-embedding M)
-        flops_token_layer = 2 * (macs_attn_token_layer + macs_router_token_layer + macs_moe_token_layer)
-        M_token = num_layers * flops_token_layer
+        # FLOPs per token across all layers (non-embedding M)
+        flops_token_all_layers = 2 * (
+            num_layers * macs_attn_token_layer +
+            num_moe_layers * macs_router_token_layer +
+            num_moe_layers * macs_moe_token_layer +
+            num_dense_layers * macs_dense_token_layer
+        )
+        M_token = flops_token_all_layers
 
         # Component-wise totals across all layers
         attn_flops_total = num_layers * 2 * macs_attn_token_layer
-        ffn_flops_total = num_layers * 2 * macs_moe_token_layer
-        router_flops_total = num_layers * 2 * macs_router_token_layer
+        ffn_flops_total = 2 * (num_moe_layers * macs_moe_token_layer + num_dense_layers * macs_dense_token_layer)
+        router_flops_total = num_moe_layers * 2 * macs_router_token_layer
         denom_ffn_attn = (attn_flops_total + ffn_flops_total)
         attn_ffn_ratio = (attn_flops_total / denom_ffn_attn) if denom_ffn_attn > 0 else 0.0
         if 0.30 <= attn_ffn_ratio <= 0.40:
@@ -294,7 +334,8 @@ def calculate_model_sizes(
             'macs_attn_token_layer': macs_attn_token_layer,
             'macs_router_token_layer': macs_router_token_layer,
             'macs_moe_token_layer': macs_moe_token_layer,
-            'flops_token_layer': flops_token_layer,
+            'macs_dense_token_layer': macs_dense_token_layer,
+            'flops_token_layer': 2 * (macs_attn_token_layer + macs_router_token_layer + macs_moe_token_layer),
             'M_token': M_token,
             'flops_embed_token': flops_embed_token,
             'c_fwd': c_fwd,
@@ -307,6 +348,10 @@ def calculate_model_sizes(
             'router_flops_total': router_flops_total,
             'attn_ffn_ratio': attn_ffn_ratio,
             'attn_ffn_status': attn_ffn_status,
+            'num_moe_layers': num_moe_layers,
+            'num_dense_layers': num_dense_layers,
+            'dense_ffn_params': dense_ffn_params,
+            'moe_shared_params': moe_shared_params,
             'hours_3090_ti': hours_3090_ti,
             'hours_h100_sxm5': hours_h100_sxm5,
             'Mopt_dense': Mopt_dense,
@@ -335,7 +380,10 @@ def create_compute_output_text(results):
     output += f"• Total Parameters: {format_number(results['total_params'])}\n"
     output += f"• Embedding Parameters: {format_number(results['embed_params'])}\n"
     output += f"• Attention Parameters: {format_number(results['attn_params'])}\n"
+    output += f"• Dense FFN Parameters: {format_number(results.get('dense_ffn_params', 0))}\n"
     output += f"• MoE Expert Parameters: {format_number(results['moe_expert_params'])}\n"
+    if results.get('moe_shared_params', 0) > 0:
+        output += f"• MoE Shared Expert Parameters: {format_number(results['moe_shared_params'])}\n"
     output += f"• Router Parameters: {format_number(results['router_params'])}\n\n"
 
     output += "🎯 Activation & Expert Config:\n"
@@ -351,11 +399,17 @@ def create_compute_output_text(results):
     output += f"• Total Parameters: {results['param_memory_gb']:.2f} GB\n"
     output += f"• Activated Parameters: {results['activated_memory_gb']:.2f} GB\n\n"
 
+    # Layer mix summary
+    if 'num_moe_layers' in results:
+        output += f"🔀 Layer Mix — Dense: {results.get('num_dense_layers', 0)} | MoE: {results.get('num_moe_layers', 0)}\n\n"
+
     output += "⚡ FLOPs (Ling non-embedding M):\n"
     output += f"• MACs/token/layer — Attn: {format_flops(results['macs_attn_token_layer'])}\n"
-    output += f"• MACs/token/layer — Router: {format_flops(results['macs_router_token_layer'])}\n"
-    output += f"• MACs/token/layer — Experts: {format_flops(results['macs_moe_token_layer'])}\n"
-    output += f"• FLOPs/token/layer (non-emb): {format_flops(results['flops_token_layer'])}\n"
+    output += f"• MACs/token/layer — Router (MoE layers): {format_flops(results['macs_router_token_layer'])}\n"
+    output += f"• MACs/token/layer — MoE Experts: {format_flops(results['macs_moe_token_layer'])}\n"
+    if 'macs_dense_token_layer' in results:
+        output += f"• MACs/token/layer — Dense FFN: {format_flops(results['macs_dense_token_layer'])}\n"
+    output += f"• FLOPs/token/layer (MoE path): {format_flops(results['flops_token_layer'])}\n"
     output += f"• M = FLOPs/token (all layers, non-emb): {format_flops(results['M_token'])}\n"
     if results['flops_embed_token']:
         output += f"• Embedding FLOPs/token: {format_flops(results['flops_embed_token'])}\n"
@@ -418,7 +472,7 @@ def calculate_memory_usage(
     num_experts,
     moe_router_topk,
     shared_experts,
-    moe_layer_freq,
+    num_moe_layers,
     shared_expert_intermediate_size,
     untie_embeddings_and_output_weights,
     mtp_num_layers,
@@ -451,6 +505,7 @@ def calculate_memory_usage(
         shared_experts = safe_int(shared_experts, 0)
         moe_ffn_hidden_size = safe_int(moe_ffn_hidden_size, 128) if num_experts > 1 else 0
         shared_expert_intermediate_size = safe_int(shared_expert_intermediate_size, 0)
+        num_moe_layers = safe_int(num_moe_layers, 0)
         untie_embeddings_and_output_weights = bool(untie_embeddings_and_output_weights)
         mtp_num_layers = safe_int(mtp_num_layers, 0)
         if mtp_num_layers == 0:
@@ -491,6 +546,8 @@ def calculate_memory_usage(
             raise ValueError("moe_router_topk must be <= num_experts")
         if shared_experts < 0 or shared_experts > num_experts:
             raise ValueError("shared_experts must be >=0 and <= num_experts")
+        if num_moe_layers < 0 or num_moe_layers > num_layers:
+            raise ValueError("num_moe_layers must be in [0, num_layers]")
         if num_experts > 1 and expert_model_parallel_size > 1 and num_experts % expert_model_parallel_size != 0:
             raise ValueError("num_experts must be multiple of EP")
         if data_parallel_size < 1 or tensor_model_parallel_size < 1 or pipeline_model_parallel_size < 1 or expert_model_parallel_size < 1:
@@ -501,14 +558,7 @@ def calculate_memory_usage(
             raise ValueError("Batch/seq must be positive")
         if not (1 <= precision_bytes_param <= 4) or not (1 <= precision_bytes_activation <= 4):
             raise ValueError("Precision bytes in [1,4]")
-        moe_layer_freq = str(moe_layer_freq) if moe_layer_freq else 'none'
-        if num_experts > 1 and moe_layer_freq == 'every':
-            moe_layer_pattern = [1] * num_layers
-        else:
-            moe_layer_pattern = [0] * num_layers
-
-        num_dense_layers = num_layers - sum(moe_layer_pattern)
-        num_moe_layers = sum(moe_layer_pattern)
+        num_dense_layers = num_layers - num_moe_layers
         num_local_experts = num_experts // expert_model_parallel_size if num_experts > 1 else 1
 
         # Attention projection size (GQA)
@@ -529,7 +579,7 @@ def calculate_memory_usage(
         # MoE FFN per layer (full experts, will shard later)
         moe_ffn_term = 2 * hidden_size * (
             moe_ffn_hidden_size * num_experts * gated_linear_multiplier +
-            shared_expert_intermediate_size * gated_linear_multiplier + 2
+            shared_expert_intermediate_size * max(0, shared_experts) * gated_linear_multiplier + 2
         )
         num_parameters_in_transformer_layer_moe = moe_ffn_term + self_attn_term
 
@@ -546,7 +596,8 @@ def calculate_memory_usage(
         # MTP block if enabled
         num_parameters_in_mtp_block = 0
         if mtp_num_layers:
-            mtp_layer_is_moe = moe_layer_pattern[-1] if moe_layer_pattern else 0
+            # Assume MTP mirrors the last layer type: MoE if any MoE layers exist
+            mtp_layer_is_moe = 1 if num_moe_layers > 0 else 0
             mtp_num_moe_layers = mtp_layer_is_moe * mtp_num_layers
             mtp_num_dense_layers = (1 - mtp_layer_is_moe) * mtp_num_layers
             num_parameters_in_mtp_block = (
@@ -685,7 +736,7 @@ def create_memory_output_text(results):
         output += f"• Activated MoE FFN: {format_number(results['activated_moe_ffn'])}\n"
         output += f"• Activated Router: {format_number(results['activated_router'])}\n"
     else:
-        output += f"• Dense: 100% activated (no sparsity)\n"
+        output += "• Dense: 100% activated (no sparsity)\n"
     output += f"• Activated Attention: {format_number(results['activated_attn'])}\n"
     output += f"• Activated Embeddings: {format_number(results['activated_embed'])}\n\n"
 
@@ -728,7 +779,7 @@ def main():
         'moe_router_num_groups': '4',
         'moe_router_group_topk': '2',
         'shared_experts': '0',
-        'moe_layer_freq': 'every',
+        'num_moe_layers': '12',
         'shared_expert_intermediate_size': '0',
         'untie_embeddings_and_output_weights': True,
         'mtp_num_layers': '0',
@@ -796,7 +847,7 @@ def main():
                 moe_router_topk_scaling_factor = gr.Textbox(label="Router Top-K Scaling Factor", value=defaults['moe_router_topk_scaling_factor'])
                 moe_router_num_groups = gr.Textbox(label="Router Num Groups", value=defaults['moe_router_num_groups'])
                 moe_router_group_topk = gr.Textbox(label="Router Group Top-K", value=defaults['moe_router_group_topk'])
-                moe_layer_freq = gr.Textbox(label="MoE Layer Freq ('every' or 'none')", value=defaults['moe_layer_freq'])
+                num_moe_layers = gr.Textbox(label="Num MoE Layers", value=defaults['num_moe_layers'])
                 shared_expert_intermediate_size = gr.Textbox(label="Shared Expert Size", value=defaults['shared_expert_intermediate_size'])
                 gated_linear_multiplier = gr.Textbox(label="Gated Linear Mult (1.5 SwiGLU)", value=defaults['gated_linear_multiplier'])
                 untie_embeddings_and_output_weights = gr.Checkbox(label="Untie Embed/LM Head", value=defaults['untie_embeddings_and_output_weights'])
@@ -859,6 +910,7 @@ def main():
         compute_inputs = [
             num_layers, hidden_size, vocab_size, num_attention_heads,
             num_experts, moe_ffn_hidden_size,
+            ffn_hidden_size, shared_expert_intermediate_size, num_moe_layers,
             moe_router_topk, moe_router_topk_scaling_factor, moe_router_num_groups, moe_router_group_topk,
             shared_experts, expert_granularity,
             batch_size, sequence_length, n_kv_heads,
@@ -868,7 +920,7 @@ def main():
         # Input order for memory
         memory_inputs = [
             num_layers, hidden_size, vocab_size, num_attention_heads, n_kv_heads, ffn_hidden_size,
-            moe_ffn_hidden_size, num_experts, moe_router_topk, shared_experts, moe_layer_freq, shared_expert_intermediate_size,
+            moe_ffn_hidden_size, num_experts, moe_router_topk, shared_experts, num_moe_layers, shared_expert_intermediate_size,
             untie_embeddings_and_output_weights, mtp_num_layers, gated_linear_multiplier,
             data_parallel_size, tensor_model_parallel_size, pipeline_model_parallel_size, expert_model_parallel_size, expert_tensor_model_parallel_size,
             micro_batch_size, sequence_length, num_microbatches, virtual_pipeline_model_parallel_size,
