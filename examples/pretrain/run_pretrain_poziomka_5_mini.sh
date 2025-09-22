@@ -102,11 +102,11 @@ GPT_MODEL_ARGS=(
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 32768
+    --max-position-embeddings 8192
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
-    --rotary-base 10000
+    --rotary-base 50000
     --rotary-percent 0.5
     --rotary-scaling-factor 40
     --swiglu
@@ -122,7 +122,7 @@ GPT_MODEL_ARGS=(
 TRAINING_ARGS=(
     --micro-batch-size 4
     --global-batch-size 80
-    --seq-length 32768
+    --seq-length 8192
     --train-iters 200
     --weight-decay 0.1
     --adam-beta1 0.9
