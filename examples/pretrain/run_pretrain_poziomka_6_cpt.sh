@@ -7,9 +7,13 @@ DATA_PATH="finepdfs_tokenized_split_apt4/finepdfs_apt4_processed_data_text_docum
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 
+
 mkdir -p ${JOB_DIR}
 CHECKPOINT_PATH=${JOB_DIR}
 TENSORBOARD_LOGS_PATH=${JOB_DIR}/runs
+
+ln -sf `readlink -f ${MODEL_PATH}` ${CHECKPOINT_PATH}/iter_0000001
+echo 1 > ${CHECKPOINT_PATH}/latest_checkpointed_iteration.txt
 
 if [[ $RANK -eq 0 ]]; then
     cp -r ${0} ${JOB_DIR}
