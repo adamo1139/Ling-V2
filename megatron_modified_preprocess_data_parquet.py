@@ -337,8 +337,33 @@ def main():
             raise Exception(
                 "nltk library required for sentence splitting is not available.")
 
+    matched_inputs = sorted(glob.glob(args.input))
+    if not matched_inputs and os.path.exists(args.input):
+        matched_inputs = [args.input]
+    if not matched_inputs:
+        raise FileNotFoundError(f"No files matched input pattern: {args.input}")
+
+    parquet_mode = all(path.lower().endswith(".parquet") for path in matched_inputs)
+
     in_ss_out_names = []
-    if args.partitions == 1:
+    if parquet_mode:
+        if args.split_sentences:
+            raise ValueError("Sentence splitting is not supported for Parquet inputs.")
+        if args.partitions == 1:
+            args.partitions = len(matched_inputs)
+        elif args.partitions != len(matched_inputs):
+            raise ValueError(
+                f"--partitions ({args.partitions}) must equal number of Parquet files "
+                f"({len(matched_inputs)}) when processing Parquet input."
+            )
+        for idx, parquet_path in enumerate(matched_inputs):
+            file_names = {
+                'partition': parquet_path,
+                'sentence_split': parquet_path,  # unused but marked existent
+                'output_prefix': f"{args.output_prefix}_{idx:05d}",
+            }
+            in_ss_out_names.append(file_names)
+    elif args.partitions == 1:
         file_name, extension = os.path.splitext(args.input)
         sentence_split_file = file_name + "_ss" + extension
         file_names = {
@@ -347,7 +372,7 @@ def main():
             'output_prefix': args.output_prefix}
         in_ss_out_names.append(file_names)
     else:
-        in_file_names = glob.glob(args.input)
+        in_file_names = matched_inputs
 
         # Count total number of lines across .jsonl files
         if args.keep_sequential_samples:
@@ -407,7 +432,7 @@ def main():
     split_sentences_present = check_files_exist(in_ss_out_names, 'sentence_split', args.partitions)
 
     # split sentences in partition files
-    if args.split_sentences and not split_sentences_present:
+    if args.split_sentences and not parquet_mode and not split_sentences_present:
         processes = []
         for name in in_ss_out_names:
             p = multiprocessing.Process(target=partition.split_sentences,
