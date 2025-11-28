@@ -67,7 +67,7 @@ if [ "$DEVICE_MODEL" = "NVIDIA GeForce RTX 3090 Ti" ] || [ "$DEVICE_MODEL" = "A1
 fi
 
 MOE_ARGS=(
-    --expert-model-parallel-size 1
+    --expert-model-parallel-size 2
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
@@ -121,9 +121,9 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 2
-    --global-batch-size 512
-    --seq-length 4096
+    --micro-batch-size 8
+    --global-batch-size 256
+    --seq-length 8192
     --train-iters 24000
     --weight-decay 0.1
     --adam-beta1 0.9
@@ -144,7 +144,7 @@ TRAINING_ARGS=(
 
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
-    --tensor-model-parallel-size 2
+    --tensor-model-parallel-size 4
     --sequence-parallel
     --overlap-grad-reduce
 )
