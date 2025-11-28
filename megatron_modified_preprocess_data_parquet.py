@@ -174,6 +174,7 @@ class Partition(object):
                                                           key, level)
             output_idx_files[key] = "{}_{}_{}.idx".format(output_prefix,
                                                           key, level)
+            os.makedirs(os.path.dirname(output_bin_files[key]), exist_ok=True)
             builders[key] = indexed_dataset.IndexedDatasetBuilder(
                 output_bin_files[key],
                 dtype=indexed_dataset.DType.optimal_dtype(tokenizer.vocab_size),
@@ -253,11 +254,11 @@ class Partition(object):
         print("Time to startup:", startup_end - startup_start)
         for i, (doc, sentence_lens, bytes_processed) in enumerate(encoded_docs, start=1):
             total_bytes_processed += bytes_processed
-            for key in doc.keys():
-                builders[key].add_document(doc[key], sentence_lens[key])
-            self.print_processing_stats(i, proc_start, total_bytes_processed)
+        for key in doc.keys():
+            builders[key].add_document(doc[key], sentence_lens[key])
+        self.print_processing_stats(i, proc_start, total_bytes_processed)
 
-        fin.close()
+    fin.close()
         builders[key].finalize(output_idx_files[key])
 
 
