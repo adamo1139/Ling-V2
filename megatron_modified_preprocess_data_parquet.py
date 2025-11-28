@@ -190,7 +190,8 @@ class Partition(object):
                 builders[key].add_document(doc[key], sentence_lens[key])
             self.print_processing_stats(i, proc_start, total_bytes_processed)
 
-        builders[key].finalize(output_idx_files[key])
+        for key in self.args.json_keys:
+            builders[key].finalize(output_idx_files[key])
 
     def split_sentences(self, file_name):
         input_file_name, output_file_name = file_name
@@ -254,12 +255,13 @@ class Partition(object):
         print("Time to startup:", startup_end - startup_start)
         for i, (doc, sentence_lens, bytes_processed) in enumerate(encoded_docs, start=1):
             total_bytes_processed += bytes_processed
-        for key in doc.keys():
-            builders[key].add_document(doc[key], sentence_lens[key])
-        self.print_processing_stats(i, proc_start, total_bytes_processed)
+            for key in doc.keys():
+                builders[key].add_document(doc[key], sentence_lens[key])
+            self.print_processing_stats(i, proc_start, total_bytes_processed)
 
-    fin.close()
-        builders[key].finalize(output_idx_files[key])
+        fin.close()
+        for key in self.args.json_keys:
+            builders[key].finalize(output_idx_files[key])
 
 
 def get_args():
