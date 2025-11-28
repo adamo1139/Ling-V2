@@ -425,8 +425,10 @@ def main():
             for idx in range(args.partitions):
                 partitioned_input_files[idx].close()
 
-    assert args.workers % args.partitions == 0
-    partition = Partition(args, args.workers//args.partitions)
+    if args.workers < args.partitions:
+        raise ValueError(f"--workers ({args.workers}) must be >= --partitions ({args.partitions}).")
+    workers_per_partition = max(1, args.workers // args.partitions)
+    partition = Partition(args, workers_per_partition)
 
     # check to see if paritions with split sentences already created
     split_sentences_present = check_files_exist(in_ss_out_names, 'sentence_split', args.partitions)
