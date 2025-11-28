@@ -12,9 +12,6 @@ mkdir -p ${JOB_DIR}
 CHECKPOINT_PATH=${JOB_DIR}
 TENSORBOARD_LOGS_PATH=${JOB_DIR}/runs
 
-ln -sf `readlink -f ${MODEL_PATH}` ${CHECKPOINT_PATH}/iter_0000001
-echo 1 > ${CHECKPOINT_PATH}/latest_checkpointed_iteration.txt
-
 if [[ $RANK -eq 0 ]]; then
     cp -r ${0} ${JOB_DIR}
     pip list > ${JOB_DIR}/pip_list.txt
@@ -137,11 +134,12 @@ TRAINING_ARGS=(
     --bf16
 
     --optimizer "adam"
-    --lr "8.0e-4"
-    --lr-decay-style cosine
-    --min-lr "4.00e-5"
+    --lr "3.0e-4"
+    --lr-decay-style constant
+    --min-lr "3.0e-4"
     --lr-warmup-iters 100
     --seed 50
+    --finetune
 )
 
 MODEL_PARALLEL_ARGS=(
@@ -166,6 +164,7 @@ EVAL_AND_LOGGING_ARGS=(
     --eval-interval 800
     --eval-iters 2
     --save $CHECKPOINT_PATH
+    --load ${MODEL_PATH}
     --ckpt-format "torch_dist"
     --async-save
     --log-interval 1
