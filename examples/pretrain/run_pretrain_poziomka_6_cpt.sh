@@ -137,7 +137,7 @@ TRAINING_ARGS=(
     --lr "3.0e-4"
     --lr-decay-style constant
     --min-lr "3.0e-4"
-    --lr-warmup-iters 100
+    --lr-warmup-iters 150
     --seed 50
     --finetune
 )
