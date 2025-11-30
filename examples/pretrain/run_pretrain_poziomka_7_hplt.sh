@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 
-MODEL_PATH="/home/ubuntu/models/poziomka6/iter_0024000"
+MODEL_PATH="/home/ubuntu/models/poziomka6/"
 JOB_DIR="poziomka_7_cpt"
 DATA_PATH="hplt3_tokenized_split_apt4/hplt3_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
