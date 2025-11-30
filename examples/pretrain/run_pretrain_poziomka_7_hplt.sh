@@ -124,7 +124,7 @@ TRAINING_ARGS=(
     --micro-batch-size 8
     --global-batch-size 256
     --seq-length 8192
-    --train-iters 24000
+    --train-iters 13600
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
