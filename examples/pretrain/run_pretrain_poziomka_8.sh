@@ -91,7 +91,7 @@ MOE_ARGS=(
     --moe-ffn-hidden-size 320
     --moe-shared-expert-intermediate-size 320
     --moe-router-score-function sigmoid
-    --moe-router-topk 2
+    --moe-router-topk 16
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
@@ -136,7 +136,7 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 8
+    --micro-batch-size 4
     --global-batch-size 256
     --seq-length 8192
     --train-iters 40000
