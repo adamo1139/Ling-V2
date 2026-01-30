@@ -3,7 +3,7 @@ set -ex
 
 MODEL_PATH="/home/ubuntu/models"
 JOB_DIR="poziomka_9_cpt_hplt"
-DATA_PATH="/scratch/hplt3_tokenized_apt4/hplt3_merged"
+DATA_PATH="/scratch/hplt3_tokenized_apt4/hplt3_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 # Verify checkpoint exists before training
