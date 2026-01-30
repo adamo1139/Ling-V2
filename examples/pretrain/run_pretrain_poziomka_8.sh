@@ -2,8 +2,8 @@
 set -ex
 
 MODEL_PATH="/home/ubuntu/models"
-JOB_DIR="poziomka_8_cpt_finepdfs"
-DATA_PATH="finepdfs_tokenized_split_apt4/finepdfs_apt4_processed_data_text_document_text_document"
+JOB_DIR="poziomka_8_cpt_finepol"
+DATA_PATH="szypulka_tokenized_apt4_merged/apt_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 # Verify checkpoint exists before training
@@ -11,7 +11,7 @@ MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 TRACKER_FILE="${MODEL_PATH}/latest_checkpointed_iteration.txt"
 if [ ! -f "${TRACKER_FILE}" ]; then
     echo "ERROR: No latest_checkpointed_iteration.txt found in ${MODEL_PATH}"
-    echo "Create it with: echo 43200 > ${TRACKER_FILE}"
+    echo "Create it with: echo 24000 > ${TRACKER_FILE}"
     exit 1
 fi
 CKPT_ITER=$(cat ${TRACKER_FILE})
@@ -91,7 +91,7 @@ MOE_ARGS=(
     --moe-ffn-hidden-size 320
     --moe-shared-expert-intermediate-size 320
     --moe-router-score-function sigmoid
-    --moe-router-topk 4
+    --moe-router-topk 16
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
@@ -139,7 +139,7 @@ TRAINING_ARGS=(
     --micro-batch-size 8
     --global-batch-size 256
     --seq-length 8192
-    --train-iters 24000
+    --train-iters 40000
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
