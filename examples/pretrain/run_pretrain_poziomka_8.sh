@@ -7,7 +7,7 @@ DATA_PATH="finepdfs_tokenized_split_apt4/finepdfs_apt4_processed_data_text_docum
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 # Verify checkpoint exists before training
-"""
+: '
 TRACKER_FILE="${MODEL_PATH}/latest_checkpointed_iteration.txt"
 if [ ! -f "${TRACKER_FILE}" ]; then
     echo "ERROR: No latest_checkpointed_iteration.txt found in ${MODEL_PATH}"
@@ -20,7 +20,7 @@ if [ ! -d "${MODEL_PATH}/iter_$(printf '%07d' ${CKPT_ITER})" ]; then
     exit 1
 fi
 echo "Will load checkpoint from iteration: ${CKPT_ITER}"
-"""
+'
 
 
 mkdir -p ${JOB_DIR}
