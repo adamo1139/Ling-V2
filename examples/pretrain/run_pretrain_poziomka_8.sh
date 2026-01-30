@@ -3,7 +3,7 @@ set -ex
 
 MODEL_PATH="/home/ubuntu/models"
 JOB_DIR="poziomka_8_cpt_finepol"
-DATA_PATH="szypulka_tokenized_apt4_merged/apt_merged_text_document"
+DATA_PATH="szypulka_tokenized_apt4_merged/apt4_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 # Verify checkpoint exists before training
