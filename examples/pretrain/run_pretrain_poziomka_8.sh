@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 
-MODEL_PATH="/home/ubuntu/models"
+MODEL_PATH="/home/ubuntu/models/iter_0043200"
 JOB_DIR="poziomka_8_cpt_finepdfs"
 DATA_PATH="finepdfs_tokenized_split_apt4/finepdfs_apt4_processed_data_text_document_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
