@@ -122,10 +122,10 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 8
-    --global-batch-size 48
+    --micro-batch-size 128
+    --global-batch-size 128
     --seq-length 512
-    --train-iters 800
+    --train-iters 200
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -160,8 +160,8 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 800
-    --eval-interval 800
+    --save-interval 200
+    --eval-interval 200
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
@@ -174,7 +174,7 @@ EVAL_AND_LOGGING_ARGS=(
     --log-world-size-to-tensorboard
     --log-validation-ppl-to-tensorboard
 
-    --wandb-project "poziomka"
+    --wandb-project "malinka"
     --wandb-exp-name ${JOB_DIR}
 
 )
