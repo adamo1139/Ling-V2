@@ -3,7 +3,7 @@ set -ex
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
 JOB_DIR="malinka_1"
-DATA_PATH="szypulka_tokenized_apt4_sample/apt3_fineweb_sample"
+DATA_PATH="szypulka_tokenized_apt4_sample/apt3_fineweb_sample_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 
