@@ -73,7 +73,7 @@ MOE_ARGS=(
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
-    --num-experts 128
+    --num-experts 32
     --moe-ffn-hidden-size 320
     --moe-shared-expert-intermediate-size 320
     --moe-router-score-function sigmoid
@@ -138,7 +138,7 @@ TRAINING_ARGS=(
     --lr "8.0e-4"
     --lr-decay-style cosine
     --min-lr "4.00e-5"
-    --lr-warmup-iters 100
+    --lr-warmup-iters 10
     --seed 50
 )
 
