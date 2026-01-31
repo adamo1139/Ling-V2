@@ -71,7 +71,7 @@ MOE_ARGS=(
     --expert-model-parallel-size 1
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
-    --moe-token-dispatcher-type alltoall
+    --moe-token-dispatcher-type allgather
     --moe-router-dtype fp32
     --num-experts 32
     --moe-ffn-hidden-size 256
@@ -88,7 +88,6 @@ MOE_ARGS=(
     --bias-zero-mean-update
     --moe-expert-capacity-factor 1.25
     --moe-pad-expert-input-to-capacity
-    --moe-shared-expert-overlap
 )
 
 MPT_ARGS=(
@@ -165,7 +164,6 @@ EVAL_AND_LOGGING_ARGS=(
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --ckpt-format "torch_dist"
-    --async-save
     --log-interval 1
     --log-throughput
     --tensorboard-dir $TENSORBOARD_LOGS_PATH 
