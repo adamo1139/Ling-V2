@@ -143,7 +143,7 @@ TRAINING_ARGS=(
 )
 
 MODEL_PARALLEL_ARGS=(
-    --pipeline-model-parallel-size 3
+    --pipeline-model-parallel-size 2
     --tensor-model-parallel-size 2
     --sequence-parallel
     --overlap-grad-reduce
