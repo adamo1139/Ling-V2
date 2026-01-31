@@ -68,7 +68,7 @@ if [ "$DEVICE_MODEL" = "NVIDIA GeForce RTX 3090 Ti" ] || [ "$DEVICE_MODEL" = "A1
 fi
 
 MOE_ARGS=(
-    --expert-model-parallel-size 1
+    --expert-model-parallel-size 2
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
@@ -104,7 +104,7 @@ GPT_MODEL_ARGS=(
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 8192
+    --max-position-embeddings 1024
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
