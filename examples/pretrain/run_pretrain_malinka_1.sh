@@ -44,8 +44,8 @@ export NCCL_NVLS_ENABLE=0
 export NCCL_CUMEM_ENABLE=0
 
 export NVTE_FLASH_ATTN=0 # get that sweet FA2 boost
-export NVTE_FUSED_ATTN=1
-export NVTE_UNFUSED_ATTN=0
+export NVTE_FUSED_ATTN=0
+export NVTE_UNFUSED_ATTN=1
 
 export NVTE_DEBUG=1
 export NVTE_DEBUG_LEVEL=2  # 2 means DEBUG level
@@ -180,7 +180,7 @@ EVAL_AND_LOGGING_ARGS=(
 )
 
 KERNEL_ARGS=(
-    --attention-backend fused
+    --attention-backend auto
     --no-masked-softmax-fusion
     --attention-softmax-in-fp32	
     --cross-entropy-loss-fusion
