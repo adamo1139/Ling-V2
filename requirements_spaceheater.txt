@@ -82,8 +82,8 @@ murmurhash==1.0.13
 natto-py==1.0.1
 networkx==3.4.2
 ninja==1.13.0
-nltk==3.9.1
-numpy==2.3.3
+nltk
+numpy==2.2.6
 nvidia-cublas-cu12==12.4.5.8
 nvidia-cuda-cupti-cu12==12.4.127
 nvidia-cuda-nvrtc-cu12==12.4.127
