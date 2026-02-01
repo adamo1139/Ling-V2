@@ -105,7 +105,7 @@ MPT_ARGS=(
 GPT_MODEL_ARGS=(
     --num-layers 6
     --hidden-size 1536
-    --ffn-hidden-size 2048
+    --ffn-hidden-size 1536
     --num-attention-heads 12
     --num-query-groups 6
     --group-query-attention
