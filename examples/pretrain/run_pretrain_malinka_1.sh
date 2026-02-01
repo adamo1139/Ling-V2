@@ -96,6 +96,12 @@ MOE_ARGS=(
     --bias-zero-mean-update
     --moe-expert-capacity-factor 1.25
     --moe-pad-expert-input-to-capacity
+    --moe-grouped-gemm
+    ## Enable fusion kernels
+    --moe-router-fusion
+    --moe-permute-fusion
+    --cross-entropy-loss-fusion
+    --cross-entropy-fusion-impl te
 )
 
 MPT_ARGS=(
@@ -152,7 +158,7 @@ TRAINING_ARGS=(
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 6
-    #--sequence-parallel
+    --sequence-parallel
     --use-distributed-optimizer
 )
 
