@@ -100,7 +100,7 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 2
+    --num-layers 16
     --hidden-size 1024
     --ffn-hidden-size 1024
     --num-attention-heads 8
@@ -147,8 +147,8 @@ TRAINING_ARGS=(
 )
 
 MODEL_PARALLEL_ARGS=(
-    --pipeline-model-parallel-size 1
-    --tensor-model-parallel-size 1
+    --pipeline-model-parallel-size 3
+    --tensor-model-parallel-size 2
     --sequence-parallel
     --overlap-grad-reduce
 )
