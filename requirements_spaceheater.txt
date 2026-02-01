@@ -83,7 +83,7 @@ natto-py==1.0.1
 networkx==3.4.2
 ninja==1.13.0
 nltk
-numpy==2.2.6
+numpy<2.0.0
 nvidia-cublas-cu12==12.4.5.8
 nvidia-cuda-cupti-cu12==12.4.127
 nvidia-cuda-nvrtc-cu12==12.4.127
