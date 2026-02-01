@@ -155,7 +155,6 @@ MODEL_PARALLEL_ARGS=(
     --sequence-parallel
     --use-distributed-optimizer
     --overlap-grad-reduce
-    --tp-comm-overlap
 )
 
 DATA_ARGS=(
