@@ -80,7 +80,7 @@ multidict==6.6.4
 multiprocess==0.70.16
 murmurhash==1.0.13
 natto-py==1.0.1
-networkx==3.5
+networkx==3.4.2
 ninja==1.13.0
 nltk==3.9.1
 numpy==2.3.3
