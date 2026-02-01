@@ -77,11 +77,11 @@ fi
 
 MOE_ARGS=(
     --expert-model-parallel-size 1
-    --expert-tensor-parallel-size 1
+    --expert-tensor-parallel-size 6
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
-    --num-experts 8
+    --num-experts 12
     --moe-ffn-hidden-size 240
     --moe-shared-expert-intermediate-size 240
     --moe-router-score-function sigmoid
@@ -111,7 +111,7 @@ GPT_MODEL_ARGS=(
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 1536
+    --max-position-embeddings 3072
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
@@ -129,9 +129,9 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 216
-    --global-batch-size 216
-    --seq-length 1536
+    --micro-batch-size 72
+    --global-batch-size 72
+    --seq-length 3072
     --train-iters 1000
     --weight-decay 0.1
     --adam-beta1 0.9
