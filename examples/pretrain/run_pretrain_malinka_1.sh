@@ -2,9 +2,9 @@
 set -ex
 
 # Force CUDA 12 to prevent conflict with system CUDA 13
-export LD_LIBRARY_PATH=/usr/local/cuda-12.5/lib64:/usr/local/cuda-12.5/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}
-export LD_PRELOAD=/usr/local/cuda-12.5/lib64/libcudart.so.12
-export CUDA_HOME=/usr/local/cuda-12.5
+export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:/usr/local/cuda-12.8/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}
+export LD_PRELOAD=/usr/local/cuda-12.8/lib64/libcudart.so.12
+export CUDA_HOME=/usr/local/cuda-12.8
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
 JOB_DIR="malinka_1"
