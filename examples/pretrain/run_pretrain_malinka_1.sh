@@ -101,14 +101,14 @@ MPT_ARGS=(
 
 GPT_MODEL_ARGS=(
     --num-layers 12
-    --hidden-size 1024
-    --ffn-hidden-size 1024
-    --num-attention-heads 8
+    --hidden-size 2048
+    --ffn-hidden-size 2048
+    --num-attention-heads 16
     --num-query-groups 4
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
-    --max-position-embeddings 1024
+    --max-position-embeddings 2048
     --vocab-size 32000
     --make-vocab-size-divisible-by 128
     --position-embedding-type "rope"
@@ -128,7 +128,7 @@ GPT_MODEL_ARGS=(
 TRAINING_ARGS=(
     --micro-batch-size 30
     --global-batch-size 180
-    --seq-length 512
+    --seq-length 2048
     --train-iters 200
     --weight-decay 0.1
     --adam-beta1 0.9
