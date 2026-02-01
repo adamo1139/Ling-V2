@@ -159,7 +159,8 @@ MODEL_PARALLEL_ARGS=(
     --tensor-model-parallel-size 6
     --sequence-parallel
     --use-distributed-optimizer
-    --tp-comm-overlap
+    --overlap-param-gather
+    --overlap-grad-reduce
 )
 
 DATA_ARGS=(
