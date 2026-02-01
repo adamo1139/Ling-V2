@@ -79,7 +79,7 @@ MOE_ARGS=(
     --expert-model-parallel-size 6
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
-    --moe-token-dispatcher-type allgather
+    --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
     --num-experts 6
     --moe-ffn-hidden-size 384
@@ -152,7 +152,7 @@ TRAINING_ARGS=(
 MODEL_PARALLEL_ARGS=(
     --pipeline-model-parallel-size 1
     --tensor-model-parallel-size 6
-    --sequence-parallel
+    #--sequence-parallel
     --use-distributed-optimizer
 )
 
