@@ -78,7 +78,7 @@ MOE_ARGS=(
     --moe-grouped-gemm
     --moe-token-dispatcher-type allgather
     --moe-router-dtype fp32
-    --num-experts 32
+    --num-experts 16
     --moe-ffn-hidden-size 256
     --moe-shared-expert-intermediate-size 256
     --moe-router-score-function sigmoid
