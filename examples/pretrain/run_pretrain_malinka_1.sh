@@ -1,9 +1,14 @@
 #!/bin/bash
 set -ex
 
+# Force CUDA 12 to prevent conflict with system CUDA 13
+export LD_LIBRARY_PATH=/usr/local/cuda-12.5/lib64:/usr/local/cuda-12.5/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}
+export LD_PRELOAD=/usr/local/cuda-12.5/lib64/libcudart.so.12
+export CUDA_HOME=/usr/local/cuda-12.5
+
 MODEL_PATH="" # no checkpoint needed for from-scratch training
 JOB_DIR="malinka_1"
-DATA_PATH="szypulka_tokenized_apt4_sample/apt3_fineweb_sample_text_document"
+DATA_PATH="szypulka_tokenized_apt4_sample/apt4_fineweb_sample_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 
@@ -121,8 +126,8 @@ GPT_MODEL_ARGS=(
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 1
-    --global-batch-size 6
+    --micro-batch-size 32
+    --global-batch-size 64
     --seq-length 512
     --train-iters 200
     --weight-decay 0.1
