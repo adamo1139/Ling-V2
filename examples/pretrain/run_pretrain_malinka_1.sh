@@ -1,10 +1,13 @@
 #!/bin/bash
 set -ex
 
-# Force CUDA 12 to prevent conflict with system CUDA 13
-#export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:/usr/local/cuda-12.8/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}
-#export LD_PRELOAD=/usr/local/cuda-12.8/lib64/libcudart.so.12
-#export CUDA_HOME=/usr/local/cuda-12.8
+export NCCL_P2P_LEVEL=2  # Enable P2P for all operations (NVL if available, else P2P)
+export NCCL_P2P_DISABLE=0  # Ensure P2P is enabled
+export NCCL_IB_DISABLE=1  # Disable InfiniBand
+export NCCL_ALGO=Tree  # Tree algorithm works better with P2P
+export NCCL_PROTO=LL  # Use LL protocol for P2P
+export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
+
 
 MODEL_PATH="" # no checkpoint needed for from-scratch training
 JOB_DIR="malinka_1"
@@ -104,7 +107,7 @@ GPT_MODEL_ARGS=(
     --hidden-size 1536
     --ffn-hidden-size 2048
     --num-attention-heads 12
-    --num-query-groups 4
+    --num-query-groups 6
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
@@ -147,10 +150,13 @@ TRAINING_ARGS=(
 )
 
 MODEL_PARALLEL_ARGS=(
-    --pipeline-model-parallel-size 6
-    --tensor-model-parallel-size 1
+    --pipeline-model-parallel-size 1
+    --tensor-model-parallel-size 6
     --sequence-parallel
+    --use-distributed-optimizer
+    --overlap-aug-lm-forward
     --overlap-grad-reduce
+    --tp-comm-overlap
 )
 
 DATA_ARGS=(
