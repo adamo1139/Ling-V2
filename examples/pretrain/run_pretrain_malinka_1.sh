@@ -98,7 +98,6 @@ MOE_ARGS=(
     --moe-pad-expert-input-to-capacity
     --moe-grouped-gemm
     ## Enable fusion kernels
-    --moe-router-fusion
     --moe-permute-fusion
     --cross-entropy-loss-fusion
     --cross-entropy-fusion-impl te
