@@ -9,11 +9,25 @@ export NCCL_PROTO=LL  # Use LL protocol for P2P
 export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
 
 
-MODEL_PATH="/home/adamo/projects/poziomka_9_cpt_dcp" # no checkpoint needed for from-scratch training
+MODEL_PATH="/home/adamo/projects/poziomka_9_cpt_dcp"
 JOB_DIR="poziomka_10"
 DATA_PATH="szypulka_tokenized_apt4_sample/apt4_fineweb_sample_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
+# Verify checkpoint exists before training
+
+TRACKER_FILE="${MODEL_PATH}/latest_checkpointed_iteration.txt"
+if [ ! -f "${TRACKER_FILE}" ]; then
+    echo "ERROR: No latest_checkpointed_iteration.txt found in ${MODEL_PATH}"
+    echo "Create it with: echo 8000 > ${TRACKER_FILE}"
+    exit 1
+fi
+CKPT_ITER=$(cat ${TRACKER_FILE})
+if [ ! -d "${MODEL_PATH}/iter_$(printf '%07d' ${CKPT_ITER})" ]; then
+    echo "ERROR: Checkpoint directory iter_$(printf '%07d' ${CKPT_ITER}) not found"
+    exit 1
+fi
+echo "Will load checkpoint from iteration: ${CKPT_ITER}"
 
 mkdir -p ${JOB_DIR}
 CHECKPOINT_PATH=${JOB_DIR}
