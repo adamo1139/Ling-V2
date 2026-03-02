@@ -81,7 +81,7 @@ MOE_ARGS=(
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
-    --num-experts 32
+    --num-experts 64
     --moe-ffn-hidden-size 512
     --moe-shared-expert-intermediate-size 1024
     --moe-router-score-function sigmoid
@@ -112,7 +112,7 @@ GPT_MODEL_ARGS=(
     --hidden-size 2048
     --ffn-hidden-size 2048
     --num-attention-heads 16
-    --num-query-groups 8
+    --num-query-groups 16
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
