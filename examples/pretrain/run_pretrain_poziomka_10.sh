@@ -9,7 +9,7 @@ export NCCL_PROTO=LL  # Use LL protocol for P2P
 export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
 
 
-MODEL_PATH="/home/adamo/projects/poziomka_9_cpt_dcp"
+MODEL_PATH="/home/adamo/projects/pretrain/poziomka_9_cpt_dcp"
 JOB_DIR="poziomka_10"
 DATA_PATH="szypulka_tokenized_apt4_sample/apt4_fineweb_sample_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
