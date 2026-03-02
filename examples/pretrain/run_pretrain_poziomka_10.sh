@@ -193,6 +193,7 @@ EVAL_AND_LOGGING_ARGS=(
     --eval-interval 200
     --eval-iters 2
     --save $CHECKPOINT_PATH
+    --load ${MODEL_PATH}
     --ckpt-format "torch_dist"
     --log-interval 1
     --log-throughput
