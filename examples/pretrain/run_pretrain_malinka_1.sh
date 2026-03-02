@@ -81,18 +81,18 @@ MOE_ARGS=(
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
     --moe-router-dtype fp32
-    --num-experts 64
-    --moe-ffn-hidden-size 512
-    --moe-shared-expert-intermediate-size 1024
+    --num-experts 128
+    --moe-ffn-hidden-size 320
+    --moe-shared-expert-intermediate-size 320
     --moe-router-score-function sigmoid
-    --moe-router-topk 6
+    --moe-router-topk 16
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
-    --moe-router-num-groups 1
-    --moe-router-group-topk 1
+    --moe-router-num-groups 8
+    --moe-router-group-topk 2
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
-    --moe-layer-freq [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    --moe-layer-freq [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
     --bias-zero-mean-update
     --moe-expert-capacity-factor 1.25
     --moe-pad-expert-input-to-capacity
@@ -108,11 +108,11 @@ MPT_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 64
-    --hidden-size 4096
-    --ffn-hidden-size 4096
-    --num-attention-heads 32
-    --num-query-groups 8
+    --num-layers 16
+    --hidden-size 2048
+    --ffn-hidden-size 2048
+    --num-attention-heads 16
+    --num-query-groups 4
     --group-query-attention
     --qk-layernorm
     --use-flash-attn
