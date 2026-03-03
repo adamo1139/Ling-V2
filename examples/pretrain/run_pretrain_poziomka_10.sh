@@ -11,7 +11,7 @@ export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
 
 MODEL_PATH="/home/adamo/projects/pretrain/poziomka_9_cpt_dcp"
 JOB_DIR="poziomka_10"
-DATA_PATH="szypulka_tokenized_apt4_sample/apt4_fineweb_sample_text_document"
+DATA_PATH="/home/adamo/projects/pretrain/Ling-V2/HPLT3_pol_APT4_topquality_tokenized/hplt3_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
 
 # Verify checkpoint exists before training
