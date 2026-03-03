@@ -189,9 +189,11 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 50
+    --save-interval 10
     --async-save
-    --eval-interval 50
+    --no-save-optim
+    --no-save-rng
+    --eval-interval 10
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --load ${MODEL_PATH}
