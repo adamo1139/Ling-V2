@@ -151,7 +151,7 @@ TRAINING_ARGS=(
     --micro-batch-size 1
     --global-batch-size 384
     --seq-length 6144
-    --train-iters 1000
+    --train-iters 150
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -164,7 +164,7 @@ TRAINING_ARGS=(
     --lr "3.0e-4"
     --lr-decay-style constant
     --min-lr "3.0e-4"
-    --lr-warmup-iters 150
+    --lr-warmup-iters 5
     --seed 50
     --finetune
 )
@@ -182,15 +182,15 @@ DATA_ARGS=(
     --data-path ${DATA_PATH}
     --tokenizer-type "HuggingFaceTokenizer"
     --tokenizer-model `dirname $(readlink -f "${BASH_SOURCE[0]}")`/../../resource/tokenizer/apt4
-    --split 9999,1,0
+    --split 999,1,0
     --dataloader-type "single"
     --no-create-attention-mask-in-dataloader
     --eod-mask-loss
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 200
-    --eval-interval 200
+    --save-interval 75
+    --eval-interval 75
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --load ${MODEL_PATH}
