@@ -226,9 +226,30 @@ def main():
             return 1
         
         # Prepare tokenizer arguments
+        tokenizer_model_path = getattr(args, 'tokenizer_model', None)
+        if tokenizer_model_path:
+            has_path_sep = any(sep in tokenizer_model_path for sep in (os.path.sep, '/', '\\'))
+            if has_path_sep and not os.path.exists(tokenizer_model_path):
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                path_candidates = [
+                    os.path.join(script_dir, tokenizer_model_path),
+                    os.path.join(script_dir, '..', tokenizer_model_path),
+                    os.path.join(os.getcwd(), tokenizer_model_path),
+                ]
+                for candidate in path_candidates:
+                    if os.path.exists(candidate):
+                        tokenizer_model_path = os.path.abspath(candidate)
+                        print(f"Resolved tokenizer model path to {tokenizer_model_path}")
+                        break
+            if has_path_sep and os.path.exists(tokenizer_model_path):
+                tokenizer_model_path = os.path.abspath(tokenizer_model_path)
+
+        if tokenizer_model_path:
+            args.tokenizer_model = tokenizer_model_path
+
         tokenizer_args = {
             'tokenizer_type': args.tokenizer_type,
-            'tokenizer_model': getattr(args, 'tokenizer_model', None),
+            'tokenizer_model': tokenizer_model_path,
             'append_eod': args.append_eod,
             'split_sentences': args.split_sentences,
             'json_keys': args.json_keys
@@ -261,15 +282,26 @@ def main():
             return 1
         
         print(f"Successfully processed {len(chunk_prefixes)} chunks")
-        
-        # Files are left in chunks - no merging performed
+
+        if not chunk_prefixes:
+            print("ERROR: Chunk preprocessing produced no outputs to merge.")
+            return 1
+
+        # Merge chunk outputs into final files
+        merge_chunk_outputs(
+            chunk_prefixes=chunk_prefixes,
+            final_output_prefix=args.output_prefix,
+            json_keys=args.json_keys,
+            tokenizer_args=tokenizer_args,
+        )
+
         total_time = time.time() - start_time
         
         print(f"Chunk-based parallel preprocessing completed!")
         print(f"Total time: {total_time:.1f} seconds")
         print(f"Processed {len(chunk_files)} chunks")
         print(f"Average time per chunk: {total_time/len(chunk_files):.1f} seconds")
-        print(f"Files left in chunks - no final merging performed")
+        print("Final merged dataset files created.")
         
         return 0
         

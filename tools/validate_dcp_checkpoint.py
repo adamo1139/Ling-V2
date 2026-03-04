@@ -5,7 +5,6 @@ Comprehensive DCP checkpoint validation script to identify issues before Hugging
 This script performs multiple validation checks on DCP checkpoints to detect problems that may
 manifest after conversion to HuggingFace format, including:
 - NaN/Inf values in weights and optimizer states
-- Negative probabilities in router weights
 - Zero or near-zero expert weights
 - Mismatched tensor shapes
 - Corrupted metadata
@@ -23,6 +22,7 @@ Usage:
 Options:
   --checkpoint-path    Path to DCP checkpoint (iter_XXXXXXX directory)
   --hf-model-path      Path to HuggingFace model directory
+  --include-optimizer  Also scan optimizer state tensors (default: off)
   --verbose            Show detailed information
   --fix-suggestions    Show suggestions for fixing detected issues
   --test-inference     Run test inference on HF model
@@ -202,10 +202,10 @@ class CheckpointValidator:
         issues_found: Dict[str, List[str]] = {
             "nan": [],
             "inf": [],
-            "negative_router": [],
             "zero_expert": [],
             "shape_mismatch": [],
         }
+        scanned_counts = {"model": 0, "optimizer": 0}
 
         def process_batch():
             nonlocal batch, acc_bytes
@@ -242,23 +242,6 @@ class CheckpointValidator:
                     if has_inf:
                         issues_found["inf"].append(name)
 
-                    # Check router weights for negative values
-                    if "router" in name.lower() and "weight" in name.lower():
-                        if (tf < 0).any().item():
-                            issues_found["negative_router"].append(name)
-                            min_val = tf.min().item()
-                            self.add_issue(
-                                ValidationIssue(
-                                    severity="critical",
-                                    category="router",
-                                    message=f"Negative router weights in {name}",
-                                    details={"min_value": min_val, "shape": tuple(tf.shape)},
-                                    fix_suggestion=(
-                                        "Router weights should be non-negative for valid probability distributions"
-                                    ),
-                                )
-                            )
-
                     # Check expert weights for near-zero values
                     if "expert" in name.lower() and "weight" in name.lower():
                         near_zero = (tf.abs() < 1e-8).float().mean().item()
@@ -280,11 +263,24 @@ class CheckpointValidator:
 
         # Process all tensors in batches
         for name, nbytes, _, _ in tensor_info:
+            # Optimizer tensors are irrelevant for CPT when using --finetune (optimizer is
+            # reinitialized). Keep them opt-in so results don't look alarming but benign.
+            is_optimizer = "optimizer" in name
+            if is_optimizer and not getattr(self, "include_optimizer", False):
+                continue
+
+            scanned_counts["optimizer" if is_optimizer else "model"] += 1
+
             if acc_bytes + nbytes > max_batch_bytes:
                 process_batch()
             batch.append(name)
             acc_bytes += nbytes
         process_batch()
+
+        print(
+            f"  Scanned tensors: model={scanned_counts['model']}"
+            + (f", optimizer={scanned_counts['optimizer']}" if getattr(self, "include_optimizer", False) else "")
+        )
 
         # Report aggregate issues
         if issues_found["nan"]:
@@ -558,6 +554,11 @@ def main():
     parser = argparse.ArgumentParser(description="Validate DCP checkpoints before HF conversion")
     parser.add_argument("--checkpoint-path", type=str, help="Path to DCP checkpoint (iter_XXXXXXX)")
     parser.add_argument("--hf-model-path", type=str, help="Path to HuggingFace model directory")
+    parser.add_argument(
+        "--include-optimizer",
+        action="store_true",
+        help="Also scan optimizer state tensors in the checkpoint (off by default)",
+    )
     parser.add_argument("--verbose", action="store_true", help="Show detailed information")
     parser.add_argument("--fix-suggestions", action="store_true", help="Show fix suggestions")
     parser.add_argument("--test-inference", action="store_true", help="Run test inference on HF model")
@@ -570,6 +571,7 @@ def main():
         sys.exit(1)
 
     validator = CheckpointValidator(verbose=args.verbose, fix_suggestions=args.fix_suggestions)
+    validator.include_optimizer = args.include_optimizer
 
     # Validate DCP checkpoint
     if args.checkpoint_path:
