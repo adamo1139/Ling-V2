@@ -182,7 +182,7 @@ DATA_ARGS=(
     --data-path ${DATA_PATH}
     --tokenizer-type "HuggingFaceTokenizer"
     --tokenizer-model `dirname $(readlink -f "${BASH_SOURCE[0]}")`/../../resource/tokenizer/apt4
-    --split 999,1,0
+    --split 9999,1,0
     --dataloader-type "single"
     --no-create-attention-mask-in-dataloader
     --eod-mask-loss
