@@ -143,7 +143,8 @@ def load_hf_into_model(model, hf_state_dict, args):
             # Routed experts
             experts = layer.mlp.experts
             num_experts = args.num_experts
-            # Handle both SequentialMLP (local_experts list) and GroupedMLP (weight tensors)
+            # Handle SequentialMLP (local_experts list), GroupedMLP (weight1/weight2),
+            # and TEGroupedMLP (linear_fc1/linear_fc2 with per-expert weight0..weightN)
             if hasattr(experts, 'local_experts'):
                 for ei in range(len(experts.local_experts)):
                     gate = hf_state_dict[f'{prefix}.mlp.experts.{ei}.gate_proj.weight']
@@ -164,18 +165,17 @@ def load_hf_into_model(model, hf_state_dict, args):
                 experts.weight1.data.copy_(
                     torch.stack([torch.cat([g, u], dim=0) for g, u in zip(all_gate, all_up)], dim=0))
                 experts.weight2.data.copy_(torch.stack(all_down, dim=0))
-            else:
-                # Try linear_fc1/linear_fc2 as stacked tensors
-                all_gate = []
-                all_up = []
-                all_down = []
+            elif hasattr(experts, 'linear_fc1'):
+                # TEGroupedMLP: linear_fc1/linear_fc2 are TEGroupedLinear
+                # with per-expert weights as weight0, weight1, ..., weightN
+                fc1 = experts.linear_fc1
+                fc2 = experts.linear_fc2
                 for ei in range(num_experts):
-                    all_gate.append(hf_state_dict[f'{prefix}.mlp.experts.{ei}.gate_proj.weight'])
-                    all_up.append(hf_state_dict[f'{prefix}.mlp.experts.{ei}.up_proj.weight'])
-                    all_down.append(hf_state_dict[f'{prefix}.mlp.experts.{ei}.down_proj.weight'])
-                experts.linear_fc1.weight.data.copy_(
-                    torch.stack([torch.cat([g, u], dim=0) for g, u in zip(all_gate, all_up)], dim=0))
-                experts.linear_fc2.weight.data.copy_(torch.stack(all_down, dim=0))
+                    gate = hf_state_dict[f'{prefix}.mlp.experts.{ei}.gate_proj.weight']
+                    up = hf_state_dict[f'{prefix}.mlp.experts.{ei}.up_proj.weight']
+                    getattr(fc1, f'weight{ei}').data.copy_(torch.cat([gate, up], dim=0))
+                    getattr(fc2, f'weight{ei}').data.copy_(
+                        hf_state_dict[f'{prefix}.mlp.experts.{ei}.down_proj.weight'])
         else:
             # Dense MLP
             gate = hf_state_dict[f'{prefix}.mlp.gate_proj.weight']
