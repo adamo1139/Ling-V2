@@ -231,33 +231,26 @@ def main():
     args = get_args()
     rank = torch.distributed.get_rank()
 
-    if rank == 0:
-        print(f'Loading HF checkpoint from {hf_path}...')
-        hf_state_dict = load_hf_state_dict(hf_path)
-        print(f'Loaded {len(hf_state_dict)} tensors')
-    else:
-        hf_state_dict = None
-
-    # Broadcast HF state dict to all ranks
-    # (only rank 0 loaded it to save memory during loading)
-    if torch.distributed.get_world_size() > 1:
-        obj_list = [hf_state_dict]
-        torch.distributed.broadcast_object_list(obj_list, src=0)
-        hf_state_dict = obj_list[0]
-
     # Build model for this rank's PP/TP/EP stage
     pre_process = mpu.is_pipeline_first_stage()
     post_process = mpu.is_pipeline_last_stage()
     model = model_provider(pre_process, post_process).to(args.params_dtype)
 
     if rank == 0:
-        print(f'Model built. Loading HF weights...')
+        print(f'Model built.')
 
-    # Each rank loads only its layers
-    load_hf_into_model(model, hf_state_dict, args)
-
-    # Free HF state dict
-    del hf_state_dict
+    # Each rank loads HF weights sequentially to avoid OOM from all ranks
+    # holding the full state dict simultaneously
+    world_size = torch.distributed.get_world_size()
+    for loading_rank in range(world_size):
+        if rank == loading_rank:
+            print(f'[rank {rank}] Loading HF weights from {hf_path}...')
+            hf_state_dict = load_hf_state_dict(hf_path)
+            load_hf_into_model(model, hf_state_dict, args)
+            del hf_state_dict
+            import gc; gc.collect()
+            print(f'[rank {rank}] Done loading weights.')
+        torch.distributed.barrier()
 
     if rank == 0:
         print(f'Saving DCP checkpoint at iteration {save_iteration}...')
