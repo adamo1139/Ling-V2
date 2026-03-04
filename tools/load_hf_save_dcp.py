@@ -114,8 +114,14 @@ def load_hf_into_model(model, hf_state_dict, args):
                 hf_state_dict[f'{prefix}.attention.key_layernorm.weight'])
 
         # Post-attention layernorm
-        layer.pre_mlp_layernorm.weight.data.copy_(
-            hf_state_dict[f'{prefix}.post_attention_layernorm.weight'])
+        # Dense layers with TE: fused into mlp.linear_fc1.layer_norm_weight
+        # MoE layers: separate pre_mlp_layernorm module
+        if is_moe:
+            layer.pre_mlp_layernorm.weight.data.copy_(
+                hf_state_dict[f'{prefix}.post_attention_layernorm.weight'])
+        else:
+            layer.mlp.linear_fc1.layer_norm_weight.data.copy_(
+                hf_state_dict[f'{prefix}.post_attention_layernorm.weight'])
 
         if is_moe:
             # Router
