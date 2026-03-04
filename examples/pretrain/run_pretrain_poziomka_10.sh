@@ -9,7 +9,7 @@ export NCCL_PROTO=LL  # Use LL protocol for P2P
 export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
 
 
-MODEL_PATH="/home/adamo/projects/pretrain/poziomka_9_cpt_dcp"
+MODEL_PATH="/home/adamo/projects/pretrain/poziomka_8_9_linear_merge_dcp"
 JOB_DIR="poziomka_10"
 DATA_PATH="/home/adamo/projects/pretrain/Ling-V2/HPLT3_pol_APT4_topquality_tokenized/hplt3_merged_text_document"
 MEGATRON_PATH="Megatron-LM-core_v0.13.0"
@@ -151,7 +151,7 @@ TRAINING_ARGS=(
     --micro-batch-size 1
     --global-batch-size 384
     --seq-length 6144
-    --train-iters 150
+    --train-iters 6000
     --weight-decay 0.1
     --adam-beta1 0.9
     --adam-beta2 0.95
@@ -164,7 +164,7 @@ TRAINING_ARGS=(
     --lr "3.0e-4"
     --lr-decay-style constant
     --min-lr "3.0e-4"
-    --lr-warmup-iters 5
+    --lr-warmup-iters 50
     --seed 50
     --finetune
 )
@@ -189,11 +189,11 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --save-interval 75
+    --save-interval 500
     --async-save
     --no-save-optim
     --no-save-rng
-    --eval-interval 75
+    --eval-interval 500
     --eval-iters 2
     --save $CHECKPOINT_PATH
     --load ${MODEL_PATH}
