@@ -85,7 +85,7 @@ def load_hf_into_model(model, hf_state_dict, args):
             hf_state_dict['lm_head.weight'])
 
     # Final layernorm (only on last PP stage)
-    if hasattr(model, 'decoder') and hasattr(model.decoder, 'final_layernorm'):
+    if hasattr(model, 'decoder') and getattr(model.decoder, 'final_layernorm', None) is not None:
         model.decoder.final_layernorm.weight.data.copy_(
             hf_state_dict['model.norm.weight'])
 
