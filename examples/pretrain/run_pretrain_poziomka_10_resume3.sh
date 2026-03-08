@@ -4,9 +4,9 @@ set -ex
 export NCCL_P2P_LEVEL=2  
 export NCCL_P2P_DISABLE=0 
 export NCCL_IB_DISABLE=1  # Disable InfiniBand
-export NCCL_ALGO=Tree  # Tree algorithm works better with P2P
-export NCCL_PROTO=LL  # Use LL protocol for P2P
-export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
+#export NCCL_ALGO=Tree  # let NCCL decide
+#export NCCL_PROTO=LL  # let NCCL decide
+#export NCCL_NVLS_ENABLE=0  # fake and gay, this is a hallucination of some llm
 
 
 MODEL_PATH="poziomka_10"
