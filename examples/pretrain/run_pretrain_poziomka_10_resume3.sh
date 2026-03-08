@@ -99,11 +99,11 @@ MOE_ARGS=(
     --moe-ffn-hidden-size 320
     --moe-shared-expert-intermediate-size 320
     --moe-router-score-function sigmoid
-    --moe-router-topk 32
+    --moe-router-topk 24
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
-    --moe-router-group-topk 4
+    --moe-router-group-topk 2
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
     --moe-layer-freq [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
@@ -171,8 +171,8 @@ TRAINING_ARGS=(
 )
 
 MODEL_PARALLEL_ARGS=(
-    --pipeline-model-parallel-size 4
-    --tensor-model-parallel-size 2
+    --pipeline-model-parallel-size 8
+    --tensor-model-parallel-size 1
     --sequence-parallel
     --use-distributed-optimizer
     --overlap-param-gather
