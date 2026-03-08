@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 
-export NCCL_P2P_LEVEL=5  
+export NCCL_P2P_LEVEL=4  
 export NCCL_P2P_DISABLE=0 
 export NCCL_IB_DISABLE=1  # Disable InfiniBand
 #export NCCL_ALGO=Tree  # let NCCL decide
