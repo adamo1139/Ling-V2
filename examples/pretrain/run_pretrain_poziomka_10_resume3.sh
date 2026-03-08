@@ -90,7 +90,7 @@ if [ "$DEVICE_MODEL" = "NVIDIA GeForce RTX 3090 Ti" ] || [ "$DEVICE_MODEL" = "A1
 fi
 
 MOE_ARGS=(
-    --expert-model-parallel-size 2
+    --expert-model-parallel-size 1
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
     --moe-token-dispatcher-type alltoall
@@ -99,7 +99,7 @@ MOE_ARGS=(
     --moe-ffn-hidden-size 320
     --moe-shared-expert-intermediate-size 320
     --moe-router-score-function sigmoid
-    --moe-router-topk 24
+    --moe-router-topk 16
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
@@ -171,7 +171,7 @@ TRAINING_ARGS=(
 )
 
 MODEL_PARALLEL_ARGS=(
-    --pipeline-model-parallel-size 4
+    --pipeline-model-parallel-size 8
     --tensor-model-parallel-size 1
     --sequence-parallel
     --use-distributed-optimizer
