@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 
-export NCCL_P2P_LEVEL=2  
+export NCCL_P2P_LEVEL=5  
 export NCCL_P2P_DISABLE=0 
 export NCCL_IB_DISABLE=1  # Disable InfiniBand
 #export NCCL_ALGO=Tree  # let NCCL decide
@@ -93,7 +93,7 @@ MOE_ARGS=(
     --expert-model-parallel-size 1
     --expert-tensor-parallel-size 1
     --moe-grouped-gemm
-    --moe-token-dispatcher-type allgather
+    --moe-token-dispatcher-type flex
     --moe-router-dtype fp32
     --num-experts 128
     --moe-ffn-hidden-size 320
