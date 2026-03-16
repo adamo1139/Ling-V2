@@ -103,7 +103,7 @@ MOE_ARGS=(
     --moe-router-enable-expert-bias
     --moe-router-topk-scaling-factor 2.5
     --moe-router-num-groups 8
-    --moe-router-group-topk 4
+    --moe-router-group-topk 2
     --moe-z-loss-coeff 0.0000035
     --moe-router-bias-update-rate 1e-3
     --moe-layer-freq [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
