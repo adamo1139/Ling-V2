@@ -1,11 +1,9 @@
 #!/bin/bash
 set -ex
 
-export NCCL_P2P_LEVEL=0  # Enable P2P for all operations (NVL if available, else P2P)
+export NCCL_P2P_LEVEL=SYS  # Enable P2P for all operations (NVL if available, else P2P)
 export NCCL_P2P_DISABLE=0  # Ensure P2P is enabled
 export NCCL_IB_DISABLE=1  # Disable InfiniBand
-export NCCL_ALGO=Tree  # Tree algorithm works better with P2P
-export NCCL_PROTO=LL  # Use LL protocol for P2P
 export NCCL_NVLS_ENABLE=0  # Disable NVLS (not supported on 3090 Ti)
 
 
