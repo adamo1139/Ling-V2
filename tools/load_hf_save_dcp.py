@@ -17,6 +17,45 @@ import torch
 from safetensors import safe_open
 
 
+def validate_hf_config(hf_path, args):
+    """Reject shape-compatible but semantically wrong imports (e.g. top-16 routing)."""
+    with open(os.path.join(hf_path, 'config.json')) as stream:
+        config = json.load(stream)
+    comparisons = {
+        'num_hidden_layers': args.num_layers,
+        'hidden_size': args.hidden_size,
+        'intermediate_size': args.ffn_hidden_size,
+        'num_attention_heads': args.num_attention_heads,
+        'num_key_value_heads': args.num_query_groups,
+        'num_experts': args.num_experts,
+        'num_experts_per_tok': args.moe_router_topk,
+        'moe_intermediate_size': args.moe_ffn_hidden_size,
+        'moe_shared_expert_intermediate_size': args.moe_shared_expert_intermediate_size,
+        'vocab_size': args.padded_vocab_size,
+        'rope_theta': args.rotary_base,
+        'partial_rotary_factor': args.rotary_percent,
+        'n_group': args.moe_router_num_groups,
+        'topk_group': args.moe_router_group_topk,
+        'routed_scaling_factor': args.moe_router_topk_scaling_factor,
+        'score_function': args.moe_router_score_function,
+        'rms_norm_eps': args.norm_epsilon,
+        'use_qk_norm': args.qk_layernorm,
+        'tie_word_embeddings': not args.untie_embeddings_and_output_weights,
+    }
+    for key, expected in comparisons.items():
+        if config.get(key) != expected:
+            raise ValueError(f'HF/Megatron mismatch: {key}={config.get(key)!r}, expected {expected!r}')
+    first_dense = config['first_k_dense_replace']
+    if args.moe_layer_freq != [0] * first_dense + [1] * (args.num_layers - first_dense):
+        raise ValueError('Dense/MoE layer layout mismatch')
+    if config.get('rope_scaling') is not None or args.use_rope_scaling:
+        raise ValueError('This converter is configured for unscaled Poziomka RoPE')
+    if args.tensor_model_parallel_size != 1 or args.expert_model_parallel_size != 1:
+        raise ValueError('HF importer currently supports TP=EP=1 only')
+    if args.num_layers % args.pipeline_model_parallel_size:
+        raise ValueError('Importer requires equally sized pipeline stages')
+
+
 def load_hf_state_dict(hf_path):
     """Load all tensors from HF safetensors checkpoint."""
     index_path = os.path.join(hf_path, 'model.safetensors.index.json')
@@ -229,6 +268,7 @@ def main():
     )
 
     args = get_args()
+    validate_hf_config(hf_path, args)
     rank = torch.distributed.get_rank()
 
     # Build model for this rank's PP/TP/EP stage

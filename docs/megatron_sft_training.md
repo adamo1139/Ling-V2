@@ -1,3 +1,11 @@
+# Poziomka / APT4
+
+For Poziomka (128 experts, top-32 routing) and the cleaned Polish conversations,
+use [the Poziomka SFT guide](../examples/sft/megatron/README_poziomka.md).
+It reuses the native Megatron pretraining loop with user+assistant loss masks
+and mmap data. The original Ling-mini example below uses a different model
+and chat format.
+
 # Environment Preparation
 ## 1. Clone Ling-V2
 ## 2. Prepare [Docker Environment](../training/megatron_based_training.dockerfile)
