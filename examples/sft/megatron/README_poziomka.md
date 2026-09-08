@@ -110,6 +110,18 @@ python3 Ling-V2/examples/sft/megatron/prepare_poziomka_sft.py \
 The initial preparation also scans the entire output, not a sample. JSON parse,
 tokenization, template or mask failures abort rather than silently reject rows.
 
+That default is deliberate, but a corpus can carry a small tail of conversations
+using APT4 control tokens as literal text — `<s>` as generated-subgroup notation,
+for instance. The fast tokenizer parses those into ids 1/2/3, and inside a
+generation block they land on supervised positions, so `encode_record` rejects
+them. `--unencodable-policy drop` skips exactly those rows instead of aborting.
+It is opt-in and never silent: `dropped_unencodable_records` is counted per split
+in the manifest totals, and each affected shard names up to twenty of them
+(row, `source_id`, error) under `dropped_unencodable`. Read those counts before
+training; a large number means the tokenizer or template is wrong, not the data.
+Rows failing for any other reason still abort. A literal control token inside an
+unsupervised `system` message is harmless and is not dropped.
+
 ## 3. Import the exact merged checkpoint, if necessary (8 GPUs)
 
 Do not substitute an older Poziomka 11 DCP for the `linear-8-9-10-11-sqrt` merge.
@@ -152,9 +164,17 @@ Optional environment settings: `SEQ_LENGTH`, `GLOBAL_BATCH_SIZE`, `LR`,
 `DATALOADER_WORKERS` (default 2 per dataset-building rank).
 Additional Megatron options can be appended to the launcher command.
 
-For a genuine continuation, set `RESUME=1` and point **both** `LOAD_CHECKPOINT`
-and `SAVE_CHECKPOINT` to the same SFT output directory. That loads optimizer,
-RNG and scheduler state; do not use it for starting SFT from the base checkpoint.
-Keep the same cache, seed, batch size, sequence length and model configuration.
-Without `RESUME=1`, SFT resets optimizer/RNG/scheduler and refuses an existing
-output directory. Original pretraining scripts/checkpoints are untouched.
+Checkpoints are weight-only (`--no-save-optim --no-save-rng --async-save`), as in
+Poziomka 8-11 pretraining. With DP=1 the distributed optimizer shards nothing
+across ranks, so saving Adam state means roughly 49 GB of host copies and the OOM
+killer takes a rank on a 94 GB machine. Megatron writes `opt_param_scheduler`
+inside the same `no_save_optim` guard, so scheduler state is not stored either.
+
+To continue an interrupted run, set `RESUME=1` and point **both** `LOAD_CHECKPOINT`
+and `SAVE_CHECKPOINT` to the same SFT output directory; do not use it for starting
+SFT from the base checkpoint. Resume restores the weights and the iteration and
+sample counters, so the data order continues, but Adam moments restart from zero.
+Constant LR with no warmup means no schedule position is lost; expect a short
+re-warming of the moment estimates. Keep the same cache, seed, batch size,
+sequence length and model configuration. Without `RESUME=1`, SFT refuses an
+existing output directory. Original pretraining scripts/checkpoints are untouched.

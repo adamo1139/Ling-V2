@@ -19,6 +19,7 @@ import numpy as np
 
 TOKENIZER = None
 LOSS_ROLES = ("user", "assistant")
+EXAMPLES_PER_SHARD = 20  # named drops kept per shard; the count is always exact
 
 
 def initialize_worker(tokenizer_path, template, loss_roles=("user", "assistant")):
@@ -43,9 +44,10 @@ def iter_records(path):
 
 
 def process_shard(job):
-    source, root, split, prefix, seq_length, policy = job
+    source, root, split, prefix, seq_length, policy, unencodable = job
     root = Path(root)
     stats = Counter()
+    dropped = []
     position = 0
     with (root / f"{prefix}.tokens.bin").open("xb") as tokens_out, \
          (root / f"{prefix}.masks.bin").open("xb") as masks_out, \
@@ -54,6 +56,18 @@ def process_shard(job):
         for row_number, record in enumerate(iter_records(source), 1):
             try:
                 ids, mask = encode_record(TOKENIZER, record, LOSS_ROLES)
+            except Exception as exc:
+                # A conversation using control tokens as literal text ("<s>" as
+                # generated-subgroup notation) puts id 1/2/3 on a supervised
+                # position. Dropping is opt-in; every drop is counted and named.
+                if unencodable == "error":
+                    raise ValueError(f"{source}:{row_number}: {exc}") from exc
+                stats["dropped_unencodable_records"] += 1
+                if len(dropped) < EXAMPLES_PER_SHARD:
+                    dropped.append({"row": row_number, "error": str(exc),
+                                    "source_id": record.get("source_id")})
+                continue
+            try:
                 stats["input_records"] += 1
                 stats["input_tokens"] += len(ids)
                 stats["input_supervised_tokens"] += int(mask.sum())
@@ -82,6 +96,8 @@ def process_shard(job):
     shard = dict(split=split, prefix=prefix, source=str(source), stats=dict(stats),
                  records=stats["records"], tokens=stats["tokens"],
                  supervised_tokens=stats["supervised_tokens"])
+    if dropped:
+        shard["dropped_unencodable"] = dropped
     shard["sha256"] = {suffix: sha256(root / f"{prefix}.{suffix}")
                        for suffix in ("tokens.bin", "masks.bin", "offsets.bin")}
     verify_shard(root, shard, seq_length, check_hashes=False)
@@ -113,6 +129,9 @@ def main():
     parser.add_argument("--seq-length", type=int, default=3072)
     parser.add_argument("--workers", type=int, default=15)
     parser.add_argument("--long-policy", choices=("truncate", "drop", "error"), default="truncate")
+    parser.add_argument("--unencodable-policy", choices=("error", "drop"), default="error",
+                        help="Rows failing template/mask validation: abort (default) or "
+                             "drop them, counted and named in the manifest")
     parser.add_argument("--loss-roles", nargs="+", choices=("user", "assistant"),
                         default=["user", "assistant"], help="Message bodies/EOS to supervise")
     parser.add_argument("--verify", type=Path, help="Full rescan of an existing manifest; no writes")
@@ -144,7 +163,7 @@ def main():
     for i, (split, source) in enumerate(sources):
         (output / split).mkdir(exist_ok=True)
         jobs.append((str(source), str(output), split, f"{split}/shard_{i:05d}",
-                     args.seq_length, args.long_policy))
+                     args.seq_length, args.long_policy, args.unencodable_policy))
     started = time.monotonic()
     shards = []
     with ProcessPoolExecutor(max_workers=args.workers,
@@ -168,6 +187,7 @@ def main():
         stats["discarded_supervised_tokens"] = stats["input_supervised_tokens"] - stats["supervised_tokens"]
         totals[split] = dict(stats)
     manifest = dict(format=FORMAT, seq_length=args.seq_length, long_policy=args.long_policy,
+                    unencodable_policy=args.unencodable_policy,
                     packing=False, special_ids=SPECIAL_IDS, workers=args.workers,
                     loss_roles=args.loss_roles,
                     tokenizer_sha256=sha256(tokenizer_dir / "tokenizer.json"),

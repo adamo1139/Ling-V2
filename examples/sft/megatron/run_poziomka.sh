@@ -22,12 +22,17 @@ fi
 if [[ "${RESUME:-0}" != 1 && -e "${SAVE_CHECKPOINT}" ]]; then
     echo "Refusing existing output; set RESUME=1 with LOAD_CHECKPOINT pointing to that SFT run" >&2; exit 1
 fi
-# Resume loads optimizer/RNG/scheduler; initial SFT deliberately resets them.
+# Saves are weight-only (--no-save-optim below), matching pretraining: with DP=1
+# the distributed optimizer shards nothing, so Adam state is ~49 GB of host copies
+# at save time and the OOM killer takes a rank. Megatron stores opt_param_scheduler
+# inside the same no_save_optim guard, so neither moments nor scheduler survive.
+# Resume therefore restores weights and the iteration/sample counters, and restarts
+# Adam moments. Constant LR with no warmup means there is no schedule position lost.
 LOAD_ARGS=(--finetune --no-load-optim --no-load-rng --override-opt_param-scheduler)
 if [[ "${RESUME:-0}" == 1 ]]; then
     [[ -f "${SAVE_CHECKPOINT}/latest_checkpointed_iteration.txt" ]] || { echo "No SFT checkpoint to resume" >&2; exit 1; }
     [[ "$(realpath -m "${LOAD_CHECKPOINT}")" == "$(realpath -m "${SAVE_CHECKPOINT}")" ]] || { echo "Resume LOAD/SAVE must point to the same SFT run" >&2; exit 1; }
-    LOAD_ARGS=(--use-checkpoint-opt_param-scheduler)
+    LOAD_ARGS=(--no-load-optim --no-load-rng --override-opt_param-scheduler)
 fi
 
 # Preserve the user's working patched-P2P/NCCL settings. No forced P2P disable,
@@ -59,6 +64,7 @@ torchrun --standalone --nproc_per_node=8 "${SCRIPT_DIR}/train_poziomka_sft.py" \
     --no-create-attention-mask-in-dataloader --attention-backend flash \
     --attention-softmax-in-fp32 --no-masked-softmax-fusion \
     --load "${LOAD_CHECKPOINT}" --save "${SAVE_CHECKPOINT}" --ckpt-format torch_dist \
+    --no-save-optim --no-save-rng --async-save \
     --save-interval "${SAVE_INTERVAL:-100}" --eval-interval "${EVAL_INTERVAL:-100}" \
     --eval-iters "${EVAL_ITERS:-10}" --log-interval 1 --no-one-logger \
     "${LOAD_ARGS[@]}" "$@"
