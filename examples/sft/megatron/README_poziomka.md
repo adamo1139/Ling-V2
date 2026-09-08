@@ -182,3 +182,18 @@ Constant LR with no warmup means no schedule position is lost; expect a short
 re-warming of the moment estimates. Keep the same cache, seed, batch size,
 sequence length and model configuration. Without `RESUME=1`, SFT refuses an
 existing output directory. Original pretraining scripts/checkpoints are untouched.
+
+## Rigga run configuration
+
+After rebuilding the cache, launch from `~/projects/pretrain`:
+
+```bash
+bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run1.sh
+```
+
+All run-specific settings are assigned in that script: the v2 cache beside the
+checkout, original merged DCP, fresh NVMe `poziomka_sft_run2` output, `RESUME=0`,
+1326 iterations, batch 768, sequence length 3072, LR 3e-4, and zero warmup.
+Edit the script to change these settings; no environment exports are required.
+1326 is a fixed budget of 1,018,368 samples, not a promise of exactly one epoch
+on the rebuilt cache. The underlying launcher uses native cross-entropy.
