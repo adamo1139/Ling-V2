@@ -22,11 +22,11 @@ WORK_DIR="${WORK_DIR:-$(cd -- "${REPO_DIR}/.." && pwd)}"
 
 export SFT_DATA="${SFT_DATA:-${WORK_DIR}/poziomka-sft-cache-3072}"
 export LOAD_CHECKPOINT="${LOAD_CHECKPOINT:-${WORK_DIR}/poziomka-linear-8-9-10-11-sqrt-dcp}"
-export SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-/media/nvme_2tb/maked/poziomka_merge/poziomka_sft_run1}"
+export SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run1}"
 
 export TRAIN_ITERS="${TRAIN_ITERS:-1326}"
 export GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-768}"
-export WARMUP_ITERS="${WARMUP_ITERS:-20}"
+export WARMUP_ITERS="${WARMUP_ITERS:-0}"
 export SAVE_INTERVAL="${SAVE_INTERVAL:-100}"
 export EVAL_INTERVAL="${EVAL_INTERVAL:-100}"
 export EVAL_ITERS="${EVAL_ITERS:-1}"
