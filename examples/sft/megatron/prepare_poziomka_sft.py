@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream JSONL/Parquet shards into user+assistant masked mmap caches, using 15 workers.
+"""Stream JSONL/Parquet shards into full-conversation mmap caches, using 15 workers.
 
 Never loads model weights or modifies the input. A completed manifest is published
 only after every output shard passes a full scan. Refuses to overwrite an output.
@@ -18,11 +18,11 @@ from poziomka_data import (FORMAT, OFFSET_DTYPE, SPECIAL_IDS, encode_record,
 import numpy as np
 
 TOKENIZER = None
-LOSS_ROLES = ("user", "assistant")
+LOSS_ROLES = ("all",)
 EXAMPLES_PER_SHARD = 20  # named drops kept per shard; the count is always exact
 
 
-def initialize_worker(tokenizer_path, template, loss_roles=("user", "assistant")):
+def initialize_worker(tokenizer_path, template, loss_roles=("all",)):
     global TOKENIZER, LOSS_ROLES
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     TOKENIZER = load_tokenizer(tokenizer_path, template)
@@ -56,10 +56,9 @@ def process_shard(job):
         for row_number, record in enumerate(iter_records(source), 1):
             try:
                 ids, mask = encode_record(TOKENIZER, record, LOSS_ROLES)
-            except Exception as exc:
-                # A conversation using control tokens as literal text ("<s>" as
-                # generated-subgroup notation) puts id 1/2/3 on a supervised
-                # position. Dropping is opt-in; every drop is counted and named.
+            except ValueError as exc:
+                # Only data/encoding validation failures may be dropped.
+                # Unexpected programming errors must abort preparation.
                 if unencodable == "error":
                     raise ValueError(f"{source}:{row_number}: {exc}") from exc
                 stats["dropped_unencodable_records"] += 1
@@ -132,8 +131,8 @@ def main():
     parser.add_argument("--unencodable-policy", choices=("error", "drop"), default="error",
                         help="Rows failing template/mask validation: abort (default) or "
                              "drop them, counted and named in the manifest")
-    parser.add_argument("--loss-roles", nargs="+", choices=("user", "assistant"),
-                        default=["user", "assistant"], help="Message bodies/EOS to supervise")
+    parser.add_argument("--loss-roles", nargs="+", choices=("all", "user", "assistant"),
+                        default=["all"], help="All real tokens (default), or selected message bodies/EOS")
     parser.add_argument("--verify", type=Path, help="Full rescan of an existing manifest; no writes")
     args = parser.parse_args()
     if args.verify:

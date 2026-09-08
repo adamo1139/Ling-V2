@@ -7,6 +7,8 @@ set -euo pipefail
 # nvme; at 7.7 GB each the root filesystem cannot hold a run's worth.
 # TRAIN_ITERS=1326 is one full pass over the 1,018,156 cached conversations at
 # global batch 768, roughly 47 hours on 8 GPUs.
+# Recompute TRAIN_ITERS after rebuilding the v2 full-conversation cache; its
+# retained record count can differ from the original role-masked cache.
 #
 # Batch 768 and LR 3e-4 match Poziomka 11 pretraining, so the LR is used at the
 # effective batch it was tuned for rather than at a 6x smaller one.

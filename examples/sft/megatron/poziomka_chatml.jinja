@@ -1,6 +1,6 @@
 {# Same rendered text as dataset-cleanup/templates/poziomka_chatml.jinja.
    Generation blocks mark selected loss roles, including im_end, not headers.
-   Default: user + assistant. These blocks are training annotations, not new text. #}
+   Optional role masks only. Full-conversation training ignores generation blocks. #}
 {{- bos_token -}}
 {%- macro body(message, first) -%}
     {%- if message['role'] == 'tool' -%}

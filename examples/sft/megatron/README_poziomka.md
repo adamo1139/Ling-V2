@@ -12,9 +12,10 @@ Docker build. No HF Trainer, LoRA, DeepSpeed or DeepEP is used here.
   total experts, **32 selected per token**, expert width 320, APT4 vocabulary
   32000, RoPE base 84000 / fraction 0.5, PP8 / TP1 / EP1.
 - `poziomka_chatml.jinja`: same rendered text as the cleanup template, with
-  generation blocks covering **user and assistant** content, reasoning, tool
-  calls and `<|im_end|>`. No injected system prompt. System messages and tool
-  results are context-only; role headers and padding are also masked.
+  optional generation blocks for role-specific loss. By default **all real
+  conversation tokens** are targets: headers, system/user/assistant/tool content,
+  reasoning, tool calls, separators and `<|im_end|>`. Only added padding is masked;
+  the initial BOS has no preceding prediction position. No injected system prompt.
   BOS=1, PAD=2, EOS=4; no vocabulary changes.
 - `prepare_poziomka_sft.py`: streams all input shards, 15 worker processes by
   default, stores uint16 tokens / uint8 masks / uint64 offsets. Each worker
@@ -47,7 +48,9 @@ memory smoke test; successful pretraining at 3072 does not establish 8192 fit.
 
 BF16 full-parameter SFT, microbatch 1, global batch 128, Adam, constant LR 3e-4
 (configurable with `LR`, minimum LR set to the same value), no warmup by default,
-full layer recomputation. Loss is normalized by supervised tokens.
+full layer recomputation. Loss is normalized by supervised tokens. Native fused cross-entropy is used:
+affected older TE cross-entropy kernels apply only the first mask value to all
+token gradients, which is incorrect even when only padding is masked.
 The LR is the user-selected starting point, matching Poziomka 8–11 pretraining.
 The batch default remains 128; use `GLOBAL_BATCH_SIZE=768` to match the Poziomka
 11 script's global batch. With microbatch 1 and PP8/TP1/EP1 on eight GPUs,
@@ -84,14 +87,20 @@ python3 Ling-V2/examples/sft/megatron/prepare_poziomka_sft.py \
   --tokenizer poziomka-linear-8-9-10-11-sqrt \
   --output poziomka-sft-cache-3072 \
   --workers 15 --seq-length 3072 --long-policy truncate \
-  --loss-roles user assistant
+  --loss-roles all
 ```
 
-The default loss roles are `user assistant`. To opt into assistant-only loss,
-prepare a separate cache with `--loss-roles assistant`. The manifest records
-the choice; training consumes those exact masks, with no additional filtering.
-The Hugging Face API calls these masks `assistant_masks`, but our template's
-generation blocks deliberately cover both selected roles by default.
+The default `--loss-roles all` supervises every real next-token target. Optional
+`--loss-roles assistant` or `--loss-roles user assistant` retain body-only
+objectives; they require separate caches. Generation annotations do not affect
+rendered text, and full-conversation mode does not use their masks.
+
+**Rebuild old caches:** this preparer writes `poziomka-sft-v2`; training rejects
+v1 caches. Prepare from the original corpus into a fresh directory and point
+`SFT_DATA` there. Do not just rename the format in an old manifest: its masks and
+retained rows reflect the previous objective. Recompute `TRAIN_ITERS` from the
+new record count. Restart the diagnostic run from the original base weights
+into a fresh output directory, rather than continuing degraded SFT weights.
 
 Output must not already exist. A failure leaves incomplete files for inspection,
 without a completed manifest; use a fresh output directory on retry. The cache
@@ -110,17 +119,12 @@ python3 Ling-V2/examples/sft/megatron/prepare_poziomka_sft.py \
 The initial preparation also scans the entire output, not a sample. JSON parse,
 tokenization, template or mask failures abort rather than silently reject rows.
 
-That default is deliberate, but a corpus can carry a small tail of conversations
-using APT4 control tokens as literal text — `<s>` as generated-subgroup notation,
-for instance. The fast tokenizer parses those into ids 1/2/3, and inside a
-generation block they land on supervised positions, so `encode_record` rejects
-them. `--unencodable-policy drop` skips exactly those rows instead of aborting.
-It is opt-in and never silent: `dropped_unencodable_records` is counted per split
-in the manifest totals, and each affected shard names up to twenty of them
-(row, `source_id`, error) under `dropped_unencodable`. Read those counts before
-training; a large number means the tokenizer or template is wrong, not the data.
-Rows failing for any other reason still abort. A literal control token inside an
-unsupervised `system` message is harmless and is not dropped.
+`--unencodable-policy drop` optionally skips rows raising encoding/validation
+`ValueError`s, recording counts and up to twenty examples per shard. It covers
+validation errors beyond literal control tokens; unexpected programming errors
+still abort. In full-conversation mode, literal special-token IDs in real text
+are supervised normally and are not rejected merely for being special tokens.
+Review dropped-row counts before training.
 
 ## 3. Import the exact merged checkpoint, if necessary (8 GPUs)
 

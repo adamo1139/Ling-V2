@@ -11,6 +11,7 @@ source "${SCRIPT_DIR}/poziomka_model_args.sh"
 : "${TRAIN_ITERS:?Set TRAIN_ITERS explicitly (start with a small smoke run)}"
 MEGATRON_PATH="${MEGATRON_PATH:-${REPO_DIR}/Megatron-LM-core_v0.13.0}"
 SEQ_LENGTH="${SEQ_LENGTH:-3072}"
+GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-128}"
 
 [[ -f "${MEGATRON_PATH}/pretrain_gpt.py" ]] || { echo "Missing patched Megatron checkout" >&2; exit 1; }
 [[ -f "${SFT_DATA}/manifest.json" ]] || { echo "Missing completed SFT manifest" >&2; exit 1; }
@@ -57,7 +58,7 @@ torchrun --standalone --nproc_per_node=8 "${SCRIPT_DIR}/train_poziomka_sft.py" \
     --adam-beta1 0.9 --adam-beta2 0.95 --clip-grad 1.0 --seed 42 \
     --moe-router-bias-update-rate "${ROUTER_BIAS_UPDATE_RATE:-0}" \
     --moe-z-loss-coeff 0.0000035 --bias-zero-mean-update \
-    --moe-permute-fusion --cross-entropy-loss-fusion --cross-entropy-fusion-impl te \
+    --moe-permute-fusion --cross-entropy-loss-fusion --cross-entropy-fusion-impl native \
     --recompute-granularity full --recompute-method uniform --recompute-num-layers 1 \
     --dataloader-type single --num-workers "${DATALOADER_WORKERS:-2}" \
     --no-create-attention-mask-in-dataloader --attention-backend flash \

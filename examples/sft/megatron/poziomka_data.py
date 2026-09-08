@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-FORMAT = "poziomka-sft-v1"
+FORMAT = "poziomka-sft-v2"
 TOKEN_DTYPE = np.dtype("<u2")
 OFFSET_DTYPE = np.dtype("<u8")
 SPECIAL_IDS = {"<s>": 1, "</s>": 2, "<|im_start|>": 3, "<|im_end|>": 4,
@@ -41,9 +41,9 @@ def load_tokenizer(path, template):
     return tokenizer
 
 
-def encode_record(tokenizer, record, loss_roles=("user", "assistant")):
-    if not loss_roles or set(loss_roles) - {"user", "assistant"}:
-        raise ValueError("Loss roles must be user and/or assistant")
+def encode_record(tokenizer, record, loss_roles=("all",)):
+    if not loss_roles or (tuple(loss_roles) != ("all",) and set(loss_roles) - {"user", "assistant"}):
+        raise ValueError("Loss roles must be all, or user and/or assistant")
     messages = [{k: v for k, v in m.items() if v is not None} for m in record["messages"]]
     if not messages or messages[0]["role"] == "assistant":
         raise ValueError("Expected a conversation starting with a prompt")
@@ -52,6 +52,17 @@ def encode_record(tokenizer, record, loss_roles=("user", "assistant")):
     tools = record.get("tools")
     if isinstance(tools, str):  # The Parquet repack stores tools as JSON text.
         tools = json.loads(tools)
+    if tuple(loss_roles) == ("all",):
+        ids = tokenizer.apply_chat_template(
+            messages, tools=tools, tokenize=True, add_generation_prompt=False,
+        )
+        if len(ids) < 2 or ids[0] != 1:
+            raise ValueError("Expected BOS and at least one next-token target")
+        # Cached records contain no padding. Literal special-token IDs are real
+        # content here; only padding positions added by the dataset are masked.
+        mask = np.ones(len(ids), dtype=np.uint8)
+        mask[0] = 0
+        return np.asarray(ids, dtype=TOKEN_DTYPE), mask
     encoded = tokenizer.apply_chat_template(
         messages, tools=tools, tokenize=True, add_generation_prompt=False,
         return_dict=True, return_assistant_tokens_mask=True, loss_roles=list(loss_roles),
@@ -73,7 +84,7 @@ def load_manifest(path):
     path = Path(path)
     manifest = json.loads(path.read_text())
     if manifest["format"] != FORMAT or manifest["special_ids"] != SPECIAL_IDS:
-        raise ValueError("Incompatible SFT cache")
+        raise ValueError("Incompatible SFT cache; rebuild with the current preparer (v2)")
     return manifest
 
 
@@ -105,8 +116,6 @@ def verify_shard(root, shard, seq_length, check_hashes=True):
         tokens, mask = ids[start:end], masks[start:end]
         if tokens[0] != 1 or mask[0] or tokens.max() >= 32000 or mask.max() > 1 or not mask[1:].any():
             raise ValueError(f"Invalid tokens/mask at record {i}")
-        if np.any(mask[np.isin(tokens, [1, 2, 3])]):
-            raise ValueError(f"Supervised prompt boundary/PAD at record {i}")
         supervised += int(mask.sum())
     if supervised != shard["supervised_tokens"]:
         raise ValueError("Supervised-token count mismatch")

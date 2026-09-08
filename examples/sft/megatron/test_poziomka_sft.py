@@ -39,7 +39,7 @@ class SFTTests(unittest.TestCase):
 
     def test_exact_render_and_user_assistant_mask(self):
         row = conversation()
-        ids, mask = encode_record(self.tokenizer, row)
+        ids, mask = encode_record(self.tokenizer, row, ("user", "assistant"))
         rendered = self.tokenizer.apply_chat_template(row["messages"], tokenize=False)
         self.assertTrue(rendered.startswith("<s><|im_start|>user\n"))
         self.assertNotIn("system", rendered)
@@ -65,6 +65,20 @@ class SFTTests(unittest.TestCase):
         np.testing.assert_array_equal(ids, assistant_ids)
         self.assertEqual(int(assistant_mask[ids == 4].sum()), 2)
         self.assertLess(int(assistant_mask.sum()), int(mask.sum()))
+
+    def test_full_conversation_includes_headers_system_and_literal_specials(self):
+        row = conversation()
+        row["messages"].insert(0, {"role": "system", "content": "Literal <s> </s> <|im_start|>"})
+        ids, mask = encode_record(self.tokenizer, row)
+        self.assertEqual(mask.tolist(), [0] + [1] * (len(ids) - 1))
+        self.assertTrue(np.all(mask[ids == 3]))
+        self.assertTrue(np.all(mask[ids == 2]))
+        with tempfile.TemporaryDirectory() as temporary:
+            shard, manifest = self.make_cache(Path(temporary), [row], seq_length=256)
+            verify_shard(Path(temporary), shard, 256)
+            item = MMapSFTDataset(manifest, "train")[0]
+            np.testing.assert_array_equal(item["loss_mask"][:len(ids)-1], 1)
+            self.assertFalse(item["loss_mask"][len(ids)-1:].any())
 
     def test_template_compatibility_and_tools(self):
         row = conversation()
@@ -97,7 +111,7 @@ class SFTTests(unittest.TestCase):
         ids, mask = encode_record(self.tokenizer, row)
         self.assertTrue(np.all(mask[ids == 5]))
         self.assertTrue(np.all(mask[ids == 6]))
-        self.assertEqual(int(mask[ids == 4].sum()), 3)  # User + 2 assistants, not tool.
+        self.assertEqual(int(mask[ids == 4].sum()), 4)  # All turns, including tool results.
         if REFERENCE_TEMPLATE:
             reference = load_tokenizer(TOKENIZER_PATH, self.template)
             reference.chat_template = Path(REFERENCE_TEMPLATE).read_text()
@@ -106,7 +120,7 @@ class SFTTests(unittest.TestCase):
     def make_cache(self, root, rows, seq_length=128, policy="truncate"):
         source = root / "input.jsonl"
         source.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
-        shard = process_shard((str(source), str(root), "train", "test", seq_length, policy))
+        shard = process_shard((str(source), str(root), "train", "test", seq_length, policy, "error"))
         manifest = root / "manifest.json"
         manifest.write_text(json.dumps(dict(format=FORMAT, special_ids=SPECIAL_IDS,
                                             seq_length=seq_length, shards=[shard])))
@@ -164,8 +178,8 @@ class SFTTests(unittest.TestCase):
                             {"role": "assistant", "content": "Tak."}]}
         with tempfile.TemporaryDirectory() as temporary:
             shard, _ = self.make_cache(Path(temporary), [row], seq_length=16)
-            self.assertEqual(shard["records"], 0)
-            self.assertEqual(shard["stats"]["dropped_no_targets_records"], 1)
+            self.assertEqual(shard["records"], 1)
+            self.assertEqual(shard["supervised_tokens"], 16)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             shard, _ = self.make_cache(root, [conversation()])
@@ -194,7 +208,7 @@ class SFTTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             metadata = json.loads(manifest.read_text())
             self.assertTrue(metadata["verified"])
-            self.assertEqual(metadata["loss_roles"], ["user", "assistant"])
+            self.assertEqual(metadata["loss_roles"], ["all"])
             # Output must be protected against accidental reruns/overwrite.
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
