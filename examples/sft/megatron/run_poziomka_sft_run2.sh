@@ -31,9 +31,9 @@ export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
 
 # Megatron enables W&B through CLI flags; entity is read by the W&B SDK.
-# Reuse the latest pretraining project and existing training-environment login.
+# Reuse the existing training-environment login with the dedicated SFT project.
 export WANDB_ENTITY="adamo1139"
-export WANDB_PROJECT="poziomka_10"
+export WANDB_PROJECT="poziomka-sft"
 export WANDB_NAME="poziomka_sft_run2_v11_8192"
 export WANDB_MODE="online"
 
