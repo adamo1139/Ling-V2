@@ -256,8 +256,16 @@ existing output directory. Original pretraining scripts/checkpoints are untouche
 
 ## Rigga run configuration
 
-`run_poziomka_sft_run1.sh` now points to `poziomka-sft-cache-v11-8192-all`,
-uses `SEQ_LENGTH=8192`, and saves to a fresh `poziomka_sft_v11_8192` directory.
+Run 1 used `run_poziomka_sft_run1.sh` at 3072 tokens and was stopped manually
+after 400 iterations. That script is preserved with its original configuration
+and planned iteration budget; 400 is the actual stopping point, not a new limit.
+Its historical checkpoint directory is named `poziomka_sft_run2`; that existing
+path is preserved despite the script being run 1.
+
+Use the separate script below for the new v11 run 2.
+
+`run_poziomka_sft_run2.sh` points to `poziomka-sft-cache-v11-8192-all`,
+uses `SEQ_LENGTH=8192`, and saves to a fresh `poziomka_sft_run2_v11_8192` directory.
 It retains the existing fixed budget of 1326 iterations at batch 768, LR 3e-4,
 and zero warmup. Review `TRAIN_ITERS` against the completed cache if you want a
 full pass rather than that fixed budget. The script assigns its own variables,
@@ -266,7 +274,7 @@ so caller environment exports do not override those settings.
 After updating those settings, launch from `~/projects/pretrain`:
 
 ```bash
-bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run1.sh
+bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run2.sh
 ```
 
 The run starts from the original merged DCP with `RESUME=0` and uses native
