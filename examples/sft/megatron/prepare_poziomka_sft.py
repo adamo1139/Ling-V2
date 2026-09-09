@@ -6,6 +6,7 @@ only after every output shard passes a full scan. Refuses to overwrite an output
 """
 import argparse
 from collections import Counter
+import copy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 import multiprocessing
@@ -43,6 +44,31 @@ def iter_records(path):
         raise ValueError(f"Unsupported input: {path}")
 
 
+def remove_reasoning_to_fit(tokenizer, record, seq_length, loss_roles):
+    """Remove complete blocks largest first; preserve source and set per-turn off prefix."""
+    changed = copy.deepcopy(record)
+    blocks = sorted(
+        [(len(tokenizer(m['reasoning_content'], add_special_tokens=False)['input_ids']), i)
+         for i, m in enumerate(changed['messages'])
+         if m['role'] == 'assistant' and m.get('reasoning_content')],
+        key=lambda pair: (-pair[0], pair[1]))
+    ids, mask = encode_record(tokenizer, changed, loss_roles)
+    removed = []
+    for tokens, index in blocks:
+        if len(ids) <= seq_length + 1:
+            break
+        message = changed['messages'][index]
+        message['reasoning_content'] = None
+        # This is a per-message thinking-off signal, not a global generation flag.
+        message['content'] = '<think>\n</think>\n' + (message['content'] or '')
+        removed.append({'message_index': index, 'reasoning_tokens': tokens})
+        ids, mask = encode_record(tokenizer, changed, loss_roles)
+    flags = [bool(m.get('reasoning_content')) for m in changed['messages'] if m['role'] == 'assistant']
+    if 'reasoning_profile' in changed:
+        changed['reasoning_profile'] = 'mixed' if any(flags) and not all(flags) else ('on' if any(flags) else 'off')
+    return changed, ids, mask, removed
+
+
 def process_shard(job):
     source, root, split, prefix, seq_length, policy, unencodable = job
     root = Path(root)
@@ -77,9 +103,26 @@ def process_shard(job):
                     if policy == "drop":
                         stats["dropped_overlong_records"] += 1
                         continue
-                    # Deliberate right truncation: never manufacture a false EOS.
-                    ids, mask = ids[:seq_length + 1], mask[:seq_length + 1]
-                    stats["truncated_records"] += 1
+                    if policy == "remove-reasoning":
+                        old_supervised = int(mask.sum())
+                        changed, ids, mask, removed = remove_reasoning_to_fit(
+                            TOKENIZER, record, seq_length, LOSS_ROLES)
+                        stats["reasoning_removed_records"] += bool(removed)
+                        stats["removed_reasoning_blocks"] += len(removed)
+                        stats["removed_reasoning_tokens"] += sum(r['reasoning_tokens'] for r in removed)
+                        stats["reasoning_removal_net_supervised_tokens"] += old_supervised - int(mask.sum())
+                        stats["fit_after_reasoning_removal_records"] += len(ids) <= seq_length + 1
+                        audit = dict(row=row_number, record_id=record.get('record_id'),
+                                     removed_blocks=removed, reasoning_profile=changed.get('reasoning_profile'),
+                                     tokens_before_fallback=len(ids), fallback_truncated=len(ids) > seq_length + 1)
+                        with (root / f"{prefix}.reasoning.jsonl").open('a', encoding='utf-8') as log:
+                            log.write(json.dumps(audit, ensure_ascii=False) + '\n')
+                    if len(ids) > seq_length + 1:
+                        # Only unresolved rows are truncated; never manufacture a false EOS.
+                        before_truncation = int(mask.sum())
+                        ids, mask = ids[:seq_length + 1], mask[:seq_length + 1]
+                        stats["truncated_records"] += 1
+                        stats["truncated_supervised_tokens"] += before_truncation - int(mask.sum())
                 if not mask[1:].any():
                     stats["dropped_no_targets_records"] += 1
                     continue
@@ -127,7 +170,8 @@ def main():
                         default=Path(__file__).with_name("poziomka_chatml.jinja"))
     parser.add_argument("--seq-length", type=int, default=8192)
     parser.add_argument("--workers", type=int, default=15)
-    parser.add_argument("--long-policy", choices=("truncate", "drop", "error"), default="truncate")
+    parser.add_argument("--long-policy", choices=("remove-reasoning", "truncate", "drop", "error"), default="remove-reasoning",
+                        help="remove-reasoning (default): remove whole reasoning blocks largest first, then truncate if still overlong")
     parser.add_argument("--unencodable-policy", choices=("error", "drop"), default="error",
                         help="Rows failing template/mask validation: abort (default) or "
                              "drop them, counted and named in the manifest")

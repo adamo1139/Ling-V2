@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """CPU-only tests with the real local APT4 tokenizer; never loads model weights."""
 import argparse
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -15,7 +16,7 @@ import numpy as np
 
 from poziomka_data import (FORMAT, SPECIAL_IDS, MMapSFTDataset, encode_record,
                            load_tokenizer, verify_shard)
-from prepare_poziomka_sft import initialize_worker, process_shard
+from prepare_poziomka_sft import initialize_worker, process_shard, remove_reasoning_to_fit
 
 HERE = Path(__file__).resolve().parent
 TOKENIZER_PATH = None
@@ -171,6 +172,50 @@ class SFTTests(unittest.TestCase):
                     item = MMapSFTDataset(manifest, "train")[0]
                     self.assertNotEqual(int(item["labels"][-1]), 4)
                     self.assertTrue(item["loss_mask"].any())
+
+    def test_greedy_whole_reasoning_and_off_prefix(self):
+        row = {'reasoning_profile': 'on', 'messages': [
+            {'role': 'user', 'content': 'Pytanie'},
+            {'role': 'assistant', 'content': 'Pierwsza odpowiedź', 'reasoning_content': 'krótko ' * 30},
+            {'role': 'user', 'content': 'Następne'},
+            {'role': 'assistant', 'content': 'Druga odpowiedź', 'reasoning_content': 'długo ' * 300}]}
+        original = copy.deepcopy(row)
+        expected = copy.deepcopy(row)
+        expected['messages'][3]['reasoning_content'] = None
+        expected['messages'][3]['content'] = '<think>\n</think>\nDruga odpowiedź'
+        budget = len(encode_record(self.tokenizer, expected, ('all',))[0]) - 1
+        changed, ids, mask, removed = remove_reasoning_to_fit(self.tokenizer, row, budget, ('all',))
+        self.assertEqual([r['message_index'] for r in removed], [3])
+        self.assertEqual(changed['messages'], expected['messages'])
+        self.assertEqual(changed['reasoning_profile'], 'mixed')
+        self.assertEqual(row, original)
+        self.assertEqual(len(ids), budget+1)
+        self.assertEqual(int(mask.sum()), budget)
+        changed, ids, mask, removed = remove_reasoning_to_fit(self.tokenizer, row, 1, ('assistant',))
+        self.assertEqual([r['message_index'] for r in removed], [3, 1])
+        self.assertEqual(changed['reasoning_profile'], 'off')
+        self.assertGreater(len(ids), 2)  # Helper leaves final answers intact for fallback.
+        self.assertEqual(row, original)
+
+    def test_reasoning_removal_before_fallback_truncation(self):
+        row = {'record_id': 'greedy-fixture', 'messages': [
+            {'role': 'user', 'content': 'Pytanie'},
+            {'role': 'assistant', 'content': 'odpowiedź ' * 200,
+             'reasoning_content': 'rozumowanie ' * 300}]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shard, manifest = self.make_cache(root, [row], seq_length=64, policy='remove-reasoning')
+            self.assertEqual(shard['stats']['removed_reasoning_blocks'], 1)
+            self.assertEqual(shard['stats']['truncated_records'], 1)
+            audit = json.loads((root / (shard['prefix']+'.reasoning.jsonl')).read_text())
+            self.assertTrue(audit['fallback_truncated'])
+            self.assertEqual(audit['record_id'], 'greedy-fixture')
+            verify_shard(root, shard, 64)
+            item = MMapSFTDataset(manifest, 'train')[0]
+            text = self.tokenizer.decode(item['tokens'])
+            self.assertIn('<think>\n</think>\n', text)
+            self.assertNotIn('rozumowanie', text)
+            self.assertNotEqual(int(item['labels'][-1]), 4)
 
     def test_no_targets_and_corruption_detection(self):
         row = {"messages": [{"role": "system", "content": "instrukcja " * 100},

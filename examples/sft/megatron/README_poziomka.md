@@ -50,8 +50,9 @@ selection. `reasoning_profile` describes the source conversation (`on`, `off`,
 keeps both its reasoning and non-reasoning answers. No special metadata handling
 or model architecture change is needed in the trainer.
 
-Training uses `add_generation_prompt=False` and preserves reasoning in every
-historical message. For inference with the **v11 tokenizer/template**:
+Training uses `add_generation_prompt=False`. The template preserves every reasoning
+block left by the preparation policy; only the greedy step removes selected blocks.
+For inference with the **v11 tokenizer/template**:
 
 | `enable_thinking` | Prefix after the assistant header |
 |---|---|
@@ -72,13 +73,19 @@ but prevents cross-conversation attention without custom attention kernels.
 No reset on `im_end`: it is a turn boundary, not a document boundary.
 
 This v11 run uses **8192 tokens**, the default for both preparation and training.
-Cache and training lengths must match. Default
-`--long-policy truncate` keeps the prefix, counts every truncated conversation
-and discarded supervised token, and never invents an EOS. Prefixes with no
-selected targets are dropped. `drop` and `error` are alternatives. This is a
-training-view decision only; the cleaned source corpus is not changed.
-The corpus has many long conversations: inspect the manifest's truncation
-counts before committing to a long run.
+Cache and training lengths must match. The default `--long-policy remove-reasoning`
+removes complete assistant `reasoning_content` blocks, largest token count first,
+retokenizing after each removal and stopping as soon as the conversation fits.
+It never trims part of a reasoning block. Each affected assistant message gets
+an empty `<think>\n</think>\n` prefix before its unchanged final answer, so its
+training text correctly indicates thinking off. Remaining reasoning is preserved;
+a conversation-wide generation flag is not used to disable other turns.
+
+If it still exceeds 8192 tokens after all reasoning is removed, preparation keeps
+the sequence prefix and truncates the remainder, as requested. This fallback can
+cut user or assistant content; it does not invent an EOS. Source Parquet files
+remain unchanged. `truncate`, `drop` and `error` remain available as alternative
+length policies without the greedy reasoning-removal step.
 
 BF16 full-parameter SFT, microbatch 1, global batch 128, Adam, constant LR 3e-4
 (configurable with `LR`, minimum LR set to the same value), no warmup by default,
@@ -127,22 +134,17 @@ is loaded and no remote code executes.
 Run from `dataset-cleanup/`, with the complete `poziomka-fun-rp-v11/` directory
 beside `Ling-V2/`. The input must contain `train/` and `validation/`.
 
-**Length policy is a separate data-retention decision.** The example below retains
-the 8192-token prefix truncation policy. It can discard
-reasoning and final-answer tokens beyond the limit; v11's lossless construction
-does not make this token cache lossless. Use `--long-policy error` instead if no
-truncation is acceptable: preparation will abort on an overlong conversation.
-8192 is the current maximum supported sequence length; longer conversations
-can still exceed it. The current preparer has no lossless windowing or
-packing path for arbitrarily long conversations.
+The command below applies the greedy policy at preparation time. Conversations
+already fitting the window are untouched. Build into the new `-greedy` cache
+path; the earlier prefix-truncated cache cannot recover text already discarded.
 
 ```bash
 python3 Ling-V2/examples/sft/megatron/prepare_poziomka_sft.py \
   --input poziomka-fun-rp-v11 \
   --tokenizer poziomka-fun-rp-v11/tokenizer \
   --chat-template poziomka-fun-rp-v11/chat_template.jinja \
-  --output poziomka-sft-cache-v11-8192-all \
-  --workers 15 --seq-length 8192 --long-policy truncate \
+  --output poziomka-sft-cache-v11-8192-all-greedy \
+  --workers 15 --seq-length 8192 --long-policy remove-reasoning \
   --loss-roles all
 ```
 
@@ -173,12 +175,19 @@ Optional full readback, including SHA-256 checks, after copying:
 
 ```bash
 python3 Ling-V2/examples/sft/megatron/prepare_poziomka_sft.py \
-  --verify poziomka-sft-cache-v11-8192-all/manifest.json
+  --verify poziomka-sft-cache-v11-8192-all-greedy/manifest.json
 ```
 
 Before GPU training, inspect `manifest.json`: `totals.train` and
 `totals.validation` record `input_records`, retained `records`, `overlong_records`,
 `truncated_records`, any dropped-record counts, and `discarded_supervised_tokens`.
+Greedy-specific counters are `reasoning_removed_records`, `removed_reasoning_blocks`,
+`removed_reasoning_tokens` (standalone block token counts),
+`reasoning_removal_net_supervised_tokens` (net change including off prefixes),
+`fit_after_reasoning_removal_records`, and `truncated_supervised_tokens` (fallback
+only). Per-shard `*.reasoning.jsonl` logs identify every overlong input, removed
+message indices, the resulting profile where present, and whether fallback was
+needed. The binary cache stores rendered tokens/masks, not the metadata profile.
 With the default encoding error policy, input counts should be 1,318,934 and
 13,401. Review token losses explicitly; do not infer them from retained record
 counts alone. `template_sha256` identifies the actual cached template.
@@ -233,7 +242,7 @@ path is preserved despite the script being run 1.
 
 Use the separate script below for the new v11 run 2.
 
-`run_poziomka_sft_run2.sh` points to `poziomka-sft-cache-v11-8192-all`,
+`run_poziomka_sft_run2.sh` points to `poziomka-sft-cache-v11-8192-all-greedy`,
 uses `SEQ_LENGTH=8192`, and saves to a fresh `poziomka_sft_run2_v11_8192` directory.
 It uses 1718 iterations at batch 768 for one pass over the generated cache,
 with LR 3e-4 and zero warmup. The script assigns its own variables,
@@ -247,12 +256,13 @@ bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run2.sh
 
 The run starts from the original merged DCP with `RESUME=0` and uses native
 cross-entropy. Edit the script to change its paths or run budget.
-The generated cache retains all 1,318,934 training records. One pass at batch
+The earlier prefix-truncated cache retained all 1,318,934 training records. One pass at batch
 768 needs 1,718 iterations; the final batch wraps by 490 samples. Recalculate
 if the cache record count or batch size changes.
 
-The supplied cache manifest reports 212,973 truncated training conversations
+The earlier prefix-truncated cache manifest reported 212,973 truncated training conversations
 (16.15%) and 3,105,827,837 discarded supervised tokens (43.30% of the source
-supervised tokens). It retains 4,067,532,602 supervised training tokens. One
-pass covers this truncated cache, not all source text; increasing the iteration
-count cannot recover the discarded suffixes.
+supervised tokens). It retained 4,067,532,602 supervised training tokens. These figures describe the
+old cache, not the new greedy cache. Rebuild from source and inspect the new
+removal/fallback counters; increasing iterations cannot recover previously
+discarded suffixes.
