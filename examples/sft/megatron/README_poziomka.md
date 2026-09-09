@@ -8,7 +8,7 @@ Docker build. No HF Trainer, LoRA, DeepSpeed or DeepEP is used here.
 
 ## Components
 
-- `poziomka_model_args.sh`: shared SFT/converter architecture: 16 layers, 128
+- `poziomka_model_args.sh`: shared SFT architecture: 16 layers, 128
   total experts, **32 selected per token**, expert width 320, APT4 vocabulary
   32000, RoPE base 84000 / fraction 0.5, PP8 / TP1 / EP1.
 - `poziomka-fun-rp-v11/chat_template.jinja`: use this explicitly for v11;
@@ -28,10 +28,6 @@ Docker build. No HF Trainer, LoRA, DeepSpeed or DeepEP is used here.
   handles data parallel sampling; first/last pipeline stages see identical data.
 - `train_poziomka_sft.py`: reuses `pretrain_gpt` model provider, forward step,
   pipeline-aware batch transfer and loss. Only the dataset provider changes.
-- `tools/convert_hf_to_dcp.sh`: shares top-32 architecture flags, quotes paths,
-  refuses existing output and leaves P2P settings alone. The Python importer
-  rejects incompatible HF architecture/router/RoPE settings before copying weights.
-
 ## v11 data and hybrid reasoning
 
 Use the corrected `poziomka-fun-rp-v11` export: **1,318,934 training conversations**
@@ -82,7 +78,7 @@ and discarded supervised token, and never invents an EOS. Prefixes with no
 selected targets are dropped. `drop` and `error` are alternatives. This is a
 training-view decision only; the cleaned source corpus is not changed.
 The corpus has many long conversations: inspect the manifest's truncation
-counts before committing to a long run. Run the GPU smoke test at 8192 too.
+counts before committing to a long run.
 
 BF16 full-parameter SFT, microbatch 1, global batch 128, Adam, constant LR 3e-4
 (configurable with `LR`, minimum LR set to the same value), no warmup by default,
@@ -162,7 +158,7 @@ cache can load successfully while containing the wrong data/template. Training
 rejects v1 caches. Prepare from the original corpus into a fresh directory and point
 `SFT_DATA` there. Do not just rename the format in an old manifest: its masks and
 retained rows reflect the previous objective. Recompute `TRAIN_ITERS` from the
-new record count. For a fresh v11 diagnostic run, use the original base weights
+new record count. For the new v11 run, use the existing merged DCP checkpoint
 and a fresh output directory; resuming an existing run is a separate operation
 with the constraints described below.
 
@@ -197,38 +193,11 @@ still abort. In full-conversation mode, literal special-token IDs in real text
 are supervised normally and are not rejected merely for being special tokens.
 Review dropped-row counts before training.
 
-## 3. Import the exact merged checkpoint, if necessary (8 GPUs)
+## 3. Training
 
-Do not substitute an older Poziomka 11 DCP for the `linear-8-9-10-11-sqrt` merge.
-If that exact merged checkpoint already has a validated Megatron DCP, reuse it.
-Otherwise, from `dataset-cleanup/`, in the working GPU environment:
-
-```bash
-export MEGATRON_PATH=/absolute/path/to/working/Megatron-LM-core_v0.13.0
-bash Ling-V2/tools/convert_hf_to_dcp.sh \
-  poziomka-linear-8-9-10-11-sqrt poziomka-merged-dcp 1
-```
-
-The existing importer loads HF weights one rank at a time to bound host memory.
-It supports TP=EP=1 and equal-size pipeline stages. GPU conversion and HF/DCP
-numerical parity have **not** been exercised here; verify before a full run.
-
-## 4. Explicit GPU smoke test, then training
-
-Example **not executed**:
-
-```bash
-SFT_DATA=/absolute/path/to/poziomka-sft-cache-v11-8192-all \
-LOAD_CHECKPOINT=/absolute/path/to/poziomka-merged-dcp \
-SAVE_CHECKPOINT=/absolute/path/to/poziomka-sft-smoke \
-SEQ_LENGTH=8192 TRAIN_ITERS=2 GLOBAL_BATCH_SIZE=16 EVAL_ITERS=2 SAVE_INTERVAL=2 \
-bash Ling-V2/examples/sft/megatron/run_poziomka.sh
-```
-
-Check all eight ranks initialize, finite loss/gradients, peak memory, validation,
-and checkpoint save/reload. Then start the actual run into a **new** output from
-the merged base, choosing `TRAIN_ITERS` deliberately. At global batch 128, one
-pass is approximately `ceil(manifest.totals.train.records / 128)` steps; the
+Use the existing `poziomka-linear-8-9-10-11-sqrt-dcp` checkpoint and the run 2
+launcher described below. At global batch 768, one pass is approximately
+`ceil(manifest.totals.train.records / 768)` steps; the
 final batch wraps if needed. Epoch order reshuffles deterministically. Validation
 uses the original held-out split and no invented test split. Each evaluation
 uses `EVAL_ITERS * GLOBAL_BATCH_SIZE` samples, advancing through that split and
