@@ -235,9 +235,8 @@ Use the separate script below for the new v11 run 2.
 
 `run_poziomka_sft_run2.sh` points to `poziomka-sft-cache-v11-8192-all`,
 uses `SEQ_LENGTH=8192`, and saves to a fresh `poziomka_sft_run2_v11_8192` directory.
-It retains the existing fixed budget of 1326 iterations at batch 768, LR 3e-4,
-and zero warmup. Review `TRAIN_ITERS` against the completed cache if you want a
-full pass rather than that fixed budget. The script assigns its own variables,
+It uses 1718 iterations at batch 768 for one pass over the generated cache,
+with LR 3e-4 and zero warmup. The script assigns its own variables,
 so caller environment exports do not override those settings.
 
 After updating those settings, launch from `~/projects/pretrain`:
@@ -248,6 +247,12 @@ bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run2.sh
 
 The run starts from the original merged DCP with `RESUME=0` and uses native
 cross-entropy. Edit the script to change its paths or run budget.
-1326 iterations consume 1,018,368 samples. If all 1,318,934 training records are
-retained, one pass at batch 768 needs 1,718 iterations; compute it again from the
-completed cache if any records are dropped.
+The generated cache retains all 1,318,934 training records. One pass at batch
+768 needs 1,718 iterations; the final batch wraps by 490 samples. Recalculate
+if the cache record count or batch size changes.
+
+The supplied cache manifest reports 212,973 truncated training conversations
+(16.15%) and 3,105,827,837 discarded supervised tokens (43.30% of the source
+supervised tokens). It retains 4,067,532,602 supervised training tokens. One
+pass covers this truncated cache, not all source text; increasing the iteration
+count cannot recover the discarded suffixes.

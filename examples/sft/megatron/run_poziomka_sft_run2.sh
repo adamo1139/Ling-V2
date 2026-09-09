@@ -16,9 +16,9 @@ export LOAD_CHECKPOINT="${WORK_DIR}/poziomka-linear-8-9-10-11-sqrt-dcp"
 export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run2_v11_8192"
 export RESUME=0
 
-# Fixed run budget: 1,018,368 samples. A full v11 pass with no dropped rows
-# takes 1718 iterations at batch 768; adjust TRAIN_ITERS if that is intended.
-export TRAIN_ITERS=1326
+# One pass over the generated cache: ceil(1,318,934 / 768) = 1718.
+# The final batch wraps by 490 samples. Recalculate if cache or batch size changes.
+export TRAIN_ITERS=1718
 export GLOBAL_BATCH_SIZE=768
 export SEQ_LENGTH=8192
 export LR=3e-4
