@@ -269,7 +269,8 @@ It uses 1718 iterations at batch 768 for one pass over the generated cache,
 with LR 3e-4 and zero warmup. The script assigns its own variables,
 so caller environment exports do not override those settings.
 
-Run 2 enables online W&B logging under entity `adamo1139`, project
+Run 2 enables online W&B logging under entity `adamo1139-no` (the default team
+reported by `wandb login --verify` for user `adamo1139`), project
 `poziomka-sft`, run name
 `poziomka_sft_run2_v11_8192`. It passes Megatron's
 `--wandb-project` and `--wandb-exp-name` flags and exports `WANDB_ENTITY`.
