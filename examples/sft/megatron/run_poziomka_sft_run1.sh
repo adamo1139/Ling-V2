@@ -11,16 +11,16 @@ REPO_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 WORK_DIR="$(cd -- "${REPO_DIR}/.." && pwd)"
 
 export MEGATRON_PATH="${REPO_DIR}/Megatron-LM-core_v0.13.0"
-export SFT_DATA="${WORK_DIR}/poziomka-sft-cache-3072-all-v2"
+export SFT_DATA="${WORK_DIR}/poziomka-sft-cache-v11-8192-all"
 export LOAD_CHECKPOINT="${WORK_DIR}/poziomka-linear-8-9-10-11-sqrt-dcp"
-export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run2"
+export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_v11_8192"
 export RESUME=0
 
-# Fixed run budget: 1,018,368 samples. Approximately one pass; the rebuilt
-# full-conversation cache may have a different record count from the old cache.
+# Fixed run budget: 1,018,368 samples. A full v11 pass with no dropped rows
+# takes 1718 iterations at batch 768; adjust TRAIN_ITERS if that is intended.
 export TRAIN_ITERS=1326
 export GLOBAL_BATCH_SIZE=768
-export SEQ_LENGTH=3072
+export SEQ_LENGTH=8192
 export LR=3e-4
 export WARMUP_ITERS=0
 export SAVE_INTERVAL=100

@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/poziomka_model_args.sh"
 : "${SAVE_CHECKPOINT:?Set SAVE_CHECKPOINT to a new SFT output directory}"
 : "${TRAIN_ITERS:?Set TRAIN_ITERS explicitly (start with a small smoke run)}"
 MEGATRON_PATH="${MEGATRON_PATH:-${REPO_DIR}/Megatron-LM-core_v0.13.0}"
-SEQ_LENGTH="${SEQ_LENGTH:-3072}"
+SEQ_LENGTH="${SEQ_LENGTH:-8192}"
 GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-128}"
 
 [[ -f "${MEGATRON_PATH}/pretrain_gpt.py" ]] || { echo "Missing patched Megatron checkout" >&2; exit 1; }

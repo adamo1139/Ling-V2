@@ -125,7 +125,7 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--chat-template", type=Path,
                         default=Path(__file__).with_name("poziomka_chatml.jinja"))
-    parser.add_argument("--seq-length", type=int, default=3072)
+    parser.add_argument("--seq-length", type=int, default=8192)
     parser.add_argument("--workers", type=int, default=15)
     parser.add_argument("--long-policy", choices=("truncate", "drop", "error"), default="truncate")
     parser.add_argument("--unencodable-policy", choices=("error", "drop"), default="error",
