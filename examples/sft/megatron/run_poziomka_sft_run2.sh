@@ -30,6 +30,13 @@ export EVAL_ITERS=1
 export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
 
+# Megatron enables W&B through CLI flags; entity is read by the W&B SDK.
+# Reuse the latest pretraining project and existing training-environment login.
+export WANDB_ENTITY="adamo1139"
+export WANDB_PROJECT="poziomka_10"
+export WANDB_NAME="poziomka_sft_run2_v11_8192"
+export WANDB_MODE="online"
+
 # Refuse a run whose checkpoints cannot fit: ~8 GB per save, weights only.
 save_parent="$(dirname "${SAVE_CHECKPOINT}")"
 [[ -d "${save_parent}" ]] || { echo "No such directory: ${save_parent}" >&2; exit 1; }
@@ -41,4 +48,5 @@ if (( free_gb < needed_gb )); then
     exit 1
 fi
 
-exec bash "${SCRIPT_DIR}/run_poziomka.sh" "$@"
+exec bash "${SCRIPT_DIR}/run_poziomka.sh" \
+    --wandb-project "${WANDB_PROJECT}" --wandb-exp-name "${WANDB_NAME}" "$@"
