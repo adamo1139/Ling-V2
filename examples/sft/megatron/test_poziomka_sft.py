@@ -217,6 +217,38 @@ class SFTTests(unittest.TestCase):
             self.assertNotIn('rozumowanie', text)
             self.assertNotEqual(int(item['labels'][-1]), 4)
 
+    def test_thinking_audit_detects_corrupted_cache(self):
+        from poziomka_data import sha256
+        from verify_poziomka_thinking import verify
+        rows = []
+        for answer in ('Tak.', 'odpowiedź ' * 200):
+            rows.append({'record_id': answer, 'reasoning_profile': 'on', 'messages': [
+                {'role': 'user', 'content': 'Pytanie'},
+                {'role': 'assistant', 'content': answer, 'reasoning_content': 'myśl ' * 300}]})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shard, manifest = self.make_cache(root, rows, seq_length=64, policy='remove-reasoning')
+            template = root / 'chat_template.jinja'
+            template.write_text(self.template)
+            metadata = json.loads(manifest.read_text())
+            metadata.update(long_policy='remove-reasoning', loss_roles=['all'],
+                            tokenizer_sha256=sha256(TOKENIZER_PATH / 'tokenizer.json'),
+                            template_sha256=sha256(template))
+            manifest.write_text(json.dumps(metadata))
+            # An unrelated shard must not be opened when a prefix is selected.
+            metadata['shards'].append(dict(prefix='unavailable'))
+            manifest.write_text(json.dumps(metadata))
+            result = verify(manifest, TOKENIZER_PATH, per_shard=0, shard_prefix='test')
+            self.assertEqual(result, dict(records=2, removed_blocks=2, fallback_records=1))
+            with self.assertRaisesRegex(ValueError, 'Unknown shard prefix'):
+                verify(manifest, TOKENIZER_PATH, shard_prefix='missing')
+            # Valid vocabulary ID corruption must fail semantic comparison.
+            with (root / 'test.tokens.bin').open('r+b') as stream:
+                stream.seek(10)
+                stream.write(b'\x00\x00')
+            with self.assertRaisesRegex(ValueError, 'Tokens/masks differ'):
+                verify(manifest, TOKENIZER_PATH, per_shard=0, shard_prefix='test')
+
     def test_no_targets_and_corruption_detection(self):
         row = {"messages": [{"role": "system", "content": "instrukcja " * 100},
                             {"role": "user", "content": "Pytanie"},

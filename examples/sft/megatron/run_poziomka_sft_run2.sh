@@ -17,6 +17,7 @@ export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run2_v
 export RESUME=0
 
 # One pass over the generated cache: ceil(1,318,934 / 768) = 1718.
+# Verified greedy cache: 2,720,336,359 tokens; no packing, so steps use records.
 # The final batch wraps by 490 samples. Recalculate if cache or batch size changes.
 export TRAIN_ITERS=1718
 export GLOBAL_BATCH_SIZE=768

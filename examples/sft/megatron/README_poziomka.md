@@ -188,6 +188,27 @@ Greedy-specific counters are `reasoning_removed_records`, `removed_reasoning_blo
 only). Per-shard `*.reasoning.jsonl` logs identify every overlong input, removed
 message indices, the resulting profile where present, and whether fallback was
 needed. The binary cache stores rendered tokens/masks, not the metadata profile.
+To check thinking-off corrections in the actual cache, run the read-only audit:
+
+```bash
+python3 Ling-V2/examples/sft/megatron/verify_poziomka_thinking.py \
+  --manifest poziomka-sft-cache-v11-8192-all-greedy/manifest.json \
+  --tokenizer poziomka-linear-8-9-10-11-sqrt
+```
+
+This requires the original source shards (use `--source-root PATH` if relocated).
+Add `--shard train/shard_00000` to limit verification to one exact manifest shard.
+For example, combine it with `--per-shard 10` for up to 20 sampled records from
+that shard, or `--per-shard 0` for all its reasoning-removal records.
+It samples two fitted and two fallback records per shard, where available,
+reconstructs the logged removals independently of the greedy selector, and compares
+the resulting token IDs and loss masks exactly with the cache. It also checks
+the audit profile, tokenizer/template hashes and fallback lengths. Use
+`--per-shard 0` to check every conversation with removed reasoning; this requires
+more tokenization time. A fallback-truncated message can have its prefix partly
+or entirely outside the retained sequence; the comparison respects that cutoff.
+This verifies logged corrections, not whether the greedy selector chose optimal blocks.
+
 With the default encoding error policy, input counts should be 1,318,934 and
 13,401. Review token losses explicitly; do not infer them from retained record
 counts alone. `template_sha256` identifies the actual cached template.
@@ -256,13 +277,13 @@ bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run2.sh
 
 The run starts from the original merged DCP with `RESUME=0` and uses native
 cross-entropy. Edit the script to change its paths or run budget.
-The earlier prefix-truncated cache retained all 1,318,934 training records. One pass at batch
-768 needs 1,718 iterations; the final batch wraps by 490 samples. Recalculate
-if the cache record count or batch size changes.
+The completed greedy cache retains all 1,318,934 training records, containing
+2,720,336,359 tokens (2,719,017,425 supervised). Of 212,973 overlong records,
+205,234 fit after reasoning removal and 7,739 require fallback truncation.
+Validation retains 13,401 records and 27,797,692 tokens.
 
-The earlier prefix-truncated cache manifest reported 212,973 truncated training conversations
-(16.15%) and 3,105,827,837 discarded supervised tokens (43.30% of the source
-supervised tokens). It retained 4,067,532,602 supervised training tokens. These figures describe the
-old cache, not the new greedy cache. Rebuild from source and inspect the new
-removal/fallback counters; increasing iterations cannot recover previously
-discarded suffixes.
+One pass at batch 768 still needs **1,718 iterations**:
+`ceil(1,318,934 / 768) = 1718`. The final batch wraps by 490 samples.
+With no packing, reduced retained token counts do not reduce the step count:
+each conversation occupies an 8192-position sequence with padding masked from loss.
+Recalculate only if the retained record count or global batch size changes.
