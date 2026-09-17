@@ -67,11 +67,13 @@ for length in "${LENGTHS[@]}"; do
     fi
 
     # Later flags win in argparse, so this overrides the 8192 in poziomka_model_args.sh.
+    # EVAL_ITERS=1 mirrors the known-good run 2 config: vary only seq_length, so a
+    # failure here is about length and not about some other setting we introduced.
     SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
     SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
-    EVAL_ITERS=0 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
+    EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
         bash "${SCRIPT_DIR}/run_poziomka.sh" \
-            --max-position-embeddings "${length}" --no-one-logger \
+            --max-position-embeddings "${length}" \
         > "${log}" 2>&1
     status=$?
 
@@ -83,8 +85,19 @@ for length in "${LENGTHS[@]}"; do
         echo "OOM  (${log})"
         RESULTS+=("${length}|OOM|${peak:--}")
     else
-        echo "FAILED exit ${status} (${log})"
+        echo "FAILED exit ${status} (${log}) -- last lines:"
+        # A non-OOM failure is a setup problem, not an answer about this length.
+        # Show it immediately instead of repeating an identical failure five times.
+        grep -iE "error|Error|Traceback|assert|raise |Exception" "${log}" | tail -15 | sed 's/^/    /'
+        echo "    ---"
+        tail -20 "${log}" | sed 's/^/    /'
         RESULTS+=("${length}|failed exit ${status}|${peak:--}")
+        if [[ "${STOP_ON_FAILURE:-1}" == 1 ]]; then
+            echo
+            echo "Stopping: this is a setup failure, not a memory limit."
+            echo "Fix it, or re-run with STOP_ON_FAILURE=0 to sweep anyway."
+            break
+        fi
     fi
     [[ "${KEEP}" == 1 ]] || rm -rf "${cache}" "${save}"
 done
