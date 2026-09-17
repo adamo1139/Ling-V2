@@ -61,6 +61,7 @@ for length in "${LENGTHS[@]}"; do
     log="${SCRATCH}/train_${length}.log"
     rm -rf "${cache}" "${save}"
 
+    echo "preparing throwaway cache at ${length}..."
     if ! python3 "${SCRIPT_DIR}/prepare_poziomka_sft.py" \
             --input "${CORPUS}" --tokenizer "${TOKENIZER}" --output "${cache}" \
             --seq-length "${length}" --workers 2 --long-policy truncate \
@@ -73,13 +74,29 @@ for length in "${LENGTHS[@]}"; do
     # Later flags win in argparse, so this overrides the 8192 in poziomka_model_args.sh.
     # EVAL_ITERS=1 mirrors the known-good run 2 config: vary only seq_length, so a
     # failure here is about length and not about some other setting we introduced.
-    SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
-    SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
-    EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
-        bash "${SCRIPT_DIR}/run_poziomka.sh" \
-            --max-position-embeddings "${length}" \
-        > "${log}" 2>&1
-    status=$?
+    # Full output goes to the log; per-iteration lines stream to the terminal so a
+    # long ITERS run is watchable instead of silent. PROGRESS=0 for the old behaviour.
+    echo "training ${ITERS} iterations at global batch ${GLOBAL_BATCH_SIZE} (full log: ${log})"
+    if [[ "${PROGRESS:-1}" == 1 ]]; then
+        SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
+        SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
+        EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
+            bash "${SCRIPT_DIR}/run_poziomka.sh" \
+                --max-position-embeddings "${length}" 2>&1 \
+            | tee "${log}" \
+            | stdbuf -oL grep -E --line-buffered \
+                'iteration +[0-9]+/|max reserved|out of memory|CUDA error|Traceback|Error:' \
+            | stdbuf -oL sed 's/^/    /'
+        status=${PIPESTATUS[0]}
+    else
+        SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
+        SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
+        EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
+            bash "${SCRIPT_DIR}/run_poziomka.sh" \
+                --max-position-embeddings "${length}" \
+            > "${log}" 2>&1
+        status=$?
+    fi
 
     # Every rank reports (report_memory guards on data-parallel rank, and DP=1 here).
     # Pipeline stages are not equally sized: the last stage carries the output head
