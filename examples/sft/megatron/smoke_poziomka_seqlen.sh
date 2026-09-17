@@ -26,6 +26,10 @@ LENGTHS=("$@")
 [[ -f "${LOAD_CHECKPOINT}/latest_checkpointed_iteration.txt" ]] || {
     echo "No DCP tracker in ${LOAD_CHECKPOINT}" >&2; exit 1; }
 
+CAPACITY=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1)
+GPUS=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
+echo "Detected ${GPUS:-?} GPUs, ${CAPACITY:-?} MiB each. Peak below is per rank, worst rank wins."
+
 mkdir -p "${SCRATCH}"
 CORPUS="${SCRATCH}/corpus"
 if [[ ! -d "${CORPUS}" ]]; then
@@ -77,10 +81,27 @@ for length in "${LENGTHS[@]}"; do
         > "${log}" 2>&1
     status=$?
 
+    # Every rank reports (report_memory guards on data-parallel rank, and DP=1 here).
+    # Pipeline stages are not equally sized: the last stage carries the output head
+    # and the cross-entropy logits, stage 0 the most in-flight 1F1B microbatches.
+    per_rank=$(python3 - "${log}" <<'PY'
+import re, sys
+peaks = {}
+for line in open(sys.argv[1], errors="replace"):
+    found = re.search(r"\[Rank (\d+)\].*max reserved: ([0-9.]+)", line)
+    if found:
+        rank = int(found.group(1))
+        peaks[rank] = max(peaks.get(rank, 0.0), float(found.group(2)))
+if peaks:
+    print(" ".join(f"{rank}:{value:.0f}" for rank, value in sorted(peaks.items())))
+PY
+)
     peak=$(grep -o 'max reserved: [0-9.]*' "${log}" | awk '{print $3}' | sort -gr | head -1)
     if [[ ${status} -eq 0 && -n "${peak}" ]]; then
-        echo "OK   peak reserved ${peak} MiB"
-        RESULTS+=("${length}|OK|${peak}")
+        hottest=$(tr ' ' '\n' <<< "${per_rank}" | sort -t: -k2 -gr | head -1 | cut -d: -f1)
+        echo "OK   peak reserved ${peak} MiB on rank ${hottest} of ${CAPACITY:-?} MiB"
+        echo "     per rank: ${per_rank}"
+        RESULTS+=("${length}|OK (rank ${hottest})|${peak}")
     elif grep -qi "out of memory\|CUDA out of memory" "${log}"; then
         echo "OOM  (${log})"
         RESULTS+=("${length}|OOM|${peak:--}")
@@ -103,12 +124,18 @@ for length in "${LENGTHS[@]}"; do
 done
 
 echo
-printf '%-12s %-22s %s\n' "seq-length" "result" "peak reserved (MiB)"
-printf '%-12s %-22s %s\n' "----------" "------" "-------------------"
+printf '%-12s %-22s %-22s %s\n' "seq-length" "result" "peak reserved (MiB)" "headroom"
+printf '%-12s %-22s %-22s %s\n' "----------" "------" "-------------------" "--------"
 for row in "${RESULTS[@]}"; do
     IFS='|' read -r length result peak <<< "${row}"
-    printf '%-12s %-22s %s\n' "${length}" "${result}" "${peak}"
+    headroom="-"
+    if [[ -n "${CAPACITY}" && "${peak}" != "-" ]]; then
+        headroom=$(awk -v p="${peak}" -v c="${CAPACITY}" 'BEGIN{printf "%.0f%% used", 100*p/c}')
+    fi
+    printf '%-12s %-22s %-22s %s\n' "${length}" "${result}" "${peak}" "${headroom}"
 done
 echo
-echo "Logs in ${SCRATCH}. Peak is the max across ranks, reported after iteration 1."
+echo "Logs in ${SCRATCH}. Peak is the worst rank, reported after iteration 1."
+echo "Treat anything above ~85% used as not viable: fragmentation and the longest"
+echo "real batch will exceed this synthetic run."
 echo "Re-run with KEEP=1 to retain caches, or GLOBAL_BATCH_SIZE=768 to match run 2."
