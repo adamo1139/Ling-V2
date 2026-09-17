@@ -188,8 +188,8 @@ def main():
         return
     if not all((args.input, args.tokenizer, args.output)):
         parser.error("--input, --tokenizer and --output are required for preparation")
-    if not 1 <= args.seq_length <= 8192 or args.workers < 1:
-        parser.error("seq-length must be 1..8192 and workers must be positive")
+    if not 1 <= args.seq_length <= 65536 or args.workers < 1:
+        parser.error("seq-length must be 1..65536 and workers must be positive")
     sources = discover(args.input)
     template = args.chat_template.read_text()
     tokenizer_path = args.tokenizer.resolve()
