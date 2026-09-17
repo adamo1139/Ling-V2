@@ -19,6 +19,10 @@ SCRATCH="${SCRATCH:-/tmp/poziomka_seqlen_smoke}"
 GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-16}"   # >= pipeline depth, so 1F1B is realistic
 ITERS="${ITERS:-3}"
 KEEP="${KEEP:-0}"
+# Activation recomputation: 'full' (least memory, ~30% slower), 'selective'
+# (attention only), 'none' (fastest, most memory). Space-separated to compare.
+RECOMPUTE_MODES="${RECOMPUTE_MODES:-${RECOMPUTE:-full}}"
+PROJECT_ITERS="${PROJECT_ITERS:-1718}"         # full-corpus run length, for the projection
 LENGTHS=("$@")
 [[ ${#LENGTHS[@]} -gt 0 ]] || LENGTHS=(8192 12288 16384 24576 32768)
 
@@ -58,7 +62,6 @@ for length in "${LENGTHS[@]}"; do
     echo "==================== seq-length ${length} ===================="
     cache="${SCRATCH}/cache_${length}"
     save="${SCRATCH}/save_${length}"
-    log="${SCRATCH}/train_${length}.log"
     rm -rf "${cache}" "${save}"
 
     echo "preparing throwaway cache at ${length}..."
@@ -67,9 +70,14 @@ for length in "${LENGTHS[@]}"; do
             --seq-length "${length}" --workers 2 --long-policy truncate \
             > "${SCRATCH}/prepare_${length}.log" 2>&1; then
         echo "PREPARE FAILED (see ${SCRATCH}/prepare_${length}.log)"
-        RESULTS+=("${length}|prepare failed|-")
+        RESULTS+=("${length}|-|prepare failed|-|-|-")
         continue
     fi
+
+for mode in ${RECOMPUTE_MODES}; do
+    log="${SCRATCH}/train_${length}_${mode}.log"
+    rm -rf "${save}"
+    echo "-- recompute=${mode}"
 
     # Later flags win in argparse, so this overrides the 8192 in poziomka_model_args.sh.
     # EVAL_ITERS=1 mirrors the known-good run 2 config: vary only seq_length, so a
@@ -81,6 +89,7 @@ for length in "${LENGTHS[@]}"; do
         SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
         SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
         EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
+        RECOMPUTE="${mode}" \
             bash "${SCRIPT_DIR}/run_poziomka.sh" \
                 --max-position-embeddings "${length}" 2>&1 \
             | tee "${log}" \
@@ -92,6 +101,7 @@ for length in "${LENGTHS[@]}"; do
         SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
         SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
         EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
+        RECOMPUTE="${mode}" \
             bash "${SCRIPT_DIR}/run_poziomka.sh" \
                 --max-position-embeddings "${length}" \
             > "${log}" 2>&1
@@ -114,14 +124,21 @@ if peaks:
 PY
 )
     peak=$(grep -o 'max reserved: [0-9.]*' "${log}" | awk '{print $3}' | sort -gr | head -1)
+    # Iteration 1 carries warmup and autotuning; the last one is the honest rate.
+    secs=$(grep -o 'elapsed time per iteration (ms): [0-9.]*' "${log}" \
+           | awk '{print $6/1000}' | tail -1)
     if [[ ${status} -eq 0 && -n "${peak}" ]]; then
         hottest=$(tr ' ' '\n' <<< "${per_rank}" | sort -t: -k2 -gr | head -1 | cut -d: -f1)
         echo "OK   peak reserved ${peak} MiB on rank ${hottest} of ${CAPACITY:-?} MiB"
         echo "     per rank: ${per_rank}"
-        RESULTS+=("${length}|OK (rank ${hottest})|${peak}")
+        if [[ -n "${secs}" ]]; then
+            echo "     ${secs} s/iteration -> ${PROJECT_ITERS} iters =" \
+                 "$(awk -v s="${secs}" -v n="${PROJECT_ITERS}" 'BEGIN{printf "%.1f days", s*n/86400}')"
+        fi
+        RESULTS+=("${length}|${mode}|OK (rank ${hottest})|${peak}|${secs:--}|-")
     elif grep -qi "out of memory\|CUDA out of memory" "${log}"; then
         echo "OOM  (${log})"
-        RESULTS+=("${length}|OOM|${peak:--}")
+        RESULTS+=("${length}|${mode}|OOM|${peak:--}|-|-")
     else
         echo "FAILED exit ${status} (${log}) -- last lines:"
         # A non-OOM failure is a setup problem, not an answer about this length.
@@ -129,27 +146,34 @@ PY
         grep -iE "error|Error|Traceback|assert|raise |Exception" "${log}" | tail -15 | sed 's/^/    /'
         echo "    ---"
         tail -20 "${log}" | sed 's/^/    /'
-        RESULTS+=("${length}|failed exit ${status}|${peak:--}")
+        RESULTS+=("${length}|${mode}|failed exit ${status}|${peak:--}|-|-")
         if [[ "${STOP_ON_FAILURE:-1}" == 1 ]]; then
             echo
             echo "Stopping: this is a setup failure, not a memory limit."
             echo "Fix it, or re-run with STOP_ON_FAILURE=0 to sweep anyway."
-            break
+            break 2
         fi
     fi
-    [[ "${KEEP}" == 1 ]] || rm -rf "${cache}" "${save}"
+    [[ "${KEEP}" == 1 ]] || rm -rf "${save}"
+done
+    [[ "${KEEP}" == 1 ]] || rm -rf "${cache}"
 done
 
 echo
-printf '%-12s %-22s %-22s %s\n' "seq-length" "result" "peak reserved (MiB)" "headroom"
-printf '%-12s %-22s %-22s %s\n' "----------" "------" "-------------------" "--------"
+fmt='%-11s %-10s %-18s %-12s %-10s %-10s %s\n'
+# shellcheck disable=SC2059
+printf "${fmt}" "seq-length" "recompute" "result" "peak (MiB)" "headroom" "s/iter" "${PROJECT_ITERS} iters"
+printf "${fmt}" "----------" "---------" "------" "----------" "--------" "------" "------------"
 for row in "${RESULTS[@]}"; do
-    IFS='|' read -r length result peak <<< "${row}"
-    headroom="-"
+    IFS='|' read -r length mode result peak secs _ <<< "${row}"
+    headroom="-"; projected="-"
     if [[ -n "${CAPACITY}" && "${peak}" != "-" ]]; then
-        headroom=$(awk -v p="${peak}" -v c="${CAPACITY}" 'BEGIN{printf "%.0f%% used", 100*p/c}')
+        headroom=$(awk -v p="${peak}" -v c="${CAPACITY}" 'BEGIN{printf "%.0f%%", 100*p/c}')
     fi
-    printf '%-12s %-22s %-22s %s\n' "${length}" "${result}" "${peak}" "${headroom}"
+    if [[ "${secs}" != "-" && -n "${secs}" ]]; then
+        projected=$(awk -v s="${secs}" -v n="${PROJECT_ITERS}" 'BEGIN{printf "%.1f days", s*n/86400}')
+    fi
+    printf "${fmt}" "${length}" "${mode}" "${result}" "${peak}" "${headroom}" "${secs}" "${projected}"
 done
 echo
 echo "Logs in ${SCRATCH}. Peak is the worst rank, reported after iteration 1."
