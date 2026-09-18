@@ -68,6 +68,10 @@ def main():
     parser.add_argument("--tolerance", type=float, default=0.15,
                         help="Max absolute logit difference allowed (bf16 kernels differ)")
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--negative-control", action="store_true",
+                        help="Deliberately break the boundaries: treat the whole window as "
+                             "one sequence. This MUST fail. A passing parity run proves "
+                             "nothing unless the same harness fails when packing is wrong.")
     args = parser.parse_args()
 
     torch.distributed.init_process_group(backend="nccl")
@@ -109,11 +113,19 @@ def main():
     if filled < args.seq_length:
         position_ids[0, filled:] = torch.arange(args.seq_length - filled, device="cuda")
         boundaries.append(args.seq_length)
-    cu_seqlens = torch.tensor(boundaries, dtype=torch.int32, device="cuda")
+    if args.negative_control:
+        # One sequence spanning the window: conversations can now see their
+        # predecessors, which is exactly the bug real packing must not have.
+        effective = [0, args.seq_length]
+        print("NEGATIVE CONTROL: boundaries removed on purpose; this must FAIL.")
+    else:
+        effective = boundaries
+    cu_seqlens = torch.tensor(effective, dtype=torch.int32, device="cuda")
+    longest = max(int(cu_seqlens[i + 1] - cu_seqlens[i]) for i in range(len(effective) - 1))
     packed_seq_params = PackedSeqParams(
         qkv_format="thd", cu_seqlens_q=cu_seqlens, cu_seqlens_kv=cu_seqlens,
         cu_seqlens_q_padded=cu_seqlens, cu_seqlens_kv_padded=cu_seqlens,
-        max_seqlen_q=max(CONVERSATIONS), max_seqlen_kv=max(CONVERSATIONS))
+        max_seqlen_q=longest, max_seqlen_kv=longest)
     with torch.no_grad():
         out = model(tokens, position_ids, None, packed_seq_params=packed_seq_params)
     packed = logits_of(out).float()
@@ -139,7 +151,17 @@ def main():
     print("differences are expected. A boundary or label bug looks different: large")
     print("differences concentrated in the conversations after the first.")
 
-    if disagreements or worst > args.tolerance:
+    failed = bool(disagreements) or worst > args.tolerance
+    if args.negative_control:
+        # Inverted: the control is only useful if breaking packing breaks the result.
+        if failed:
+            print("\nPASS (negative control): removing boundaries changed the outputs, "
+                  "so the parity check genuinely detects packing bugs.")
+            return 0
+        print("\nFAIL (negative control): outputs were identical even with boundaries "
+              "removed. The parity check is vacuous -- it cannot detect a real bug.")
+        return 1
+    if failed:
         print("\nFAIL: packed and unpacked disagree beyond kernel noise.")
         return 1
     print("\nPASS: packing preserves per-token outputs.")
