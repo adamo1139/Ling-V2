@@ -173,6 +173,12 @@ class MMapSFTDataset:
         derives the identical plan without communication. The bin *order* is what
         gets reshuffled per epoch, which keeps the sample count fixed across epochs
         -- repacking per epoch would change the epoch length and break index math.
+
+        Deliberately next-fit, not first-fit-decreasing. FFD packs ~9 points tighter
+        on this corpus, but it sorts by length, so the longest conversations land in
+        bins together and batch composition becomes correlated with length. Next-fit
+        over a shuffled order keeps bins mixed. This is a settled choice: do not
+        switch to FFD for the packing ratio alone.
         """
         lengths = self.usable_lengths()
         if lengths.max(initial=0) > self.seq_length:
