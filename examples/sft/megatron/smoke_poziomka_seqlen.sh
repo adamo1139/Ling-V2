@@ -89,7 +89,7 @@ for length in "${LENGTHS[@]}"; do
                 --max-position-embeddings "${length}" 2>&1 \
             | tee "${log}" \
             | stdbuf -oL grep -E --line-buffered \
-                'iteration +[0-9]+/|max reserved|out of memory|CUDA error|Traceback|Error:' \
+                'iteration +[0-9]+/|max reserved|^SFT:|out of memory|CUDA error|Traceback|Error:' \
             | stdbuf -oL sed 's/^/    /'
         status=${PIPESTATUS[0]}
     else
