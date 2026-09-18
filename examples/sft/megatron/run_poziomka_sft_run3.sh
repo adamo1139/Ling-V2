@@ -26,6 +26,11 @@ export RESUME=0
 
 export SEQ_LENGTH=16384
 export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
+# Xu et al. Table 2 minimum base: 16k needs 3.1e5, 32k needs 6.4e5. The pretrained
+# 84000 is exactly the 8k bound, so 16384 would train below it. 640000 buys the 32k
+# row as well, so a later 32k run needs no second base change (and no second
+# adaptation of the weights to a new base).
+export ROTARY_BASE=640000
 export PACKING=1
 export GLOBAL_BATCH_SIZE=768
 export LR=3e-4
