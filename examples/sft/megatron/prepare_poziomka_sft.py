@@ -44,24 +44,43 @@ def iter_records(path):
         raise ValueError(f"Unsupported input: {path}")
 
 
-def remove_reasoning_to_fit(tokenizer, record, seq_length, loss_roles):
-    """Remove complete blocks largest first; preserve source and set per-turn off prefix."""
+def remove_reasoning_to_fit(tokenizer, record, seq_length, loss_roles,
+                            selector="smallest-sufficient"):
+    """Remove complete blocks until the record fits; preserve source, set off prefixes.
+
+    smallest-sufficient (default): take the smallest block that closes the gap on
+    its own, falling back to the largest when none does. largest-first was the
+    original behaviour and is kept so earlier caches can be rebuilt exactly; it
+    discards far more than necessary, because a record 300 tokens over loses a
+    whole 9,000-token trace. On the v11 corpus at 8192 that cost ~2.4B reasoning
+    tokens: 19.4% of reasoning retained where the window allowed roughly 44%.
+    """
     changed = copy.deepcopy(record)
-    blocks = sorted(
-        [(len(tokenizer(m['reasoning_content'], add_special_tokens=False)['input_ids']), i)
-         for i, m in enumerate(changed['messages'])
-         if m['role'] == 'assistant' and m.get('reasoning_content')],
-        key=lambda pair: (-pair[0], pair[1]))
+    costs = {i: len(tokenizer(m['reasoning_content'], add_special_tokens=False)['input_ids'])
+             for i, m in enumerate(changed['messages'])
+             if m['role'] == 'assistant' and m.get('reasoning_content')}
     ids, mask = encode_record(tokenizer, changed, loss_roles)
     removed = []
-    for tokens, index in blocks:
-        if len(ids) <= seq_length + 1:
-            break
+    while len(ids) > seq_length + 1 and costs:
+        if selector == "largest-first":
+            negated, index = min((-cost, i) for i, cost in costs.items())
+            cost = -negated
+        else:
+            excess = len(ids) - (seq_length + 1)
+            # Removing a block frees its tokens plus its wrapper, minus the empty
+            # off prefix, so block size slightly understates the gain: conservative.
+            sufficient = [(c, i) for i, c in costs.items() if c >= excess]
+            if sufficient:
+                cost, index = min(sufficient)
+            else:
+                negated, index = min((-c, i) for i, c in costs.items())
+                cost = -negated
         message = changed['messages'][index]
         message['reasoning_content'] = None
         # This is a per-message thinking-off signal, not a global generation flag.
         message['content'] = '<think>\n</think>\n' + (message['content'] or '')
-        removed.append({'message_index': index, 'reasoning_tokens': tokens})
+        removed.append({'message_index': index, 'reasoning_tokens': cost})
+        del costs[index]
         ids, mask = encode_record(tokenizer, changed, loss_roles)
     flags = [bool(m.get('reasoning_content')) for m in changed['messages'] if m['role'] == 'assistant']
     if 'reasoning_profile' in changed:
@@ -70,7 +89,9 @@ def remove_reasoning_to_fit(tokenizer, record, seq_length, loss_roles):
 
 
 def process_shard(job):
-    source, root, split, prefix, seq_length, policy, unencodable = job
+    # The selector is optional so jobs built before it existed still run.
+    source, root, split, prefix, seq_length, policy, unencodable, *rest = job
+    selector = rest[0] if rest else "smallest-sufficient"
     root = Path(root)
     stats = Counter()
     dropped = []
@@ -106,7 +127,7 @@ def process_shard(job):
                     if policy == "remove-reasoning":
                         old_supervised = int(mask.sum())
                         changed, ids, mask, removed = remove_reasoning_to_fit(
-                            TOKENIZER, record, seq_length, LOSS_ROLES)
+                            TOKENIZER, record, seq_length, LOSS_ROLES, selector)
                         stats["reasoning_removed_records"] += bool(removed)
                         stats["removed_reasoning_blocks"] += len(removed)
                         stats["removed_reasoning_tokens"] += sum(r['reasoning_tokens'] for r in removed)
@@ -177,6 +198,10 @@ def main():
                              "drop them, counted and named in the manifest")
     parser.add_argument("--loss-roles", nargs="+", choices=("all", "user", "assistant"),
                         default=["all"], help="All real tokens (default), or selected message bodies/EOS")
+    parser.add_argument("--reasoning-selector", choices=("smallest-sufficient", "largest-first"),
+                        default="smallest-sufficient",
+                        help="Which reasoning blocks the remove-reasoning policy sheds. "
+                             "largest-first reproduces caches built before this option existed")
     parser.add_argument("--verify", type=Path, help="Full rescan of an existing manifest; no writes")
     args = parser.parse_args()
     if args.verify:
@@ -206,7 +231,8 @@ def main():
     for i, (split, source) in enumerate(sources):
         (output / split).mkdir(exist_ok=True)
         jobs.append((str(source), str(output), split, f"{split}/shard_{i:05d}",
-                     args.seq_length, args.long_policy, args.unencodable_policy))
+                     args.seq_length, args.long_policy, args.unencodable_policy,
+                     args.reasoning_selector))
     started = time.monotonic()
     shards = []
     with ProcessPoolExecutor(max_workers=args.workers,
@@ -231,6 +257,7 @@ def main():
         totals[split] = dict(stats)
     manifest = dict(format=FORMAT, seq_length=args.seq_length, long_policy=args.long_policy,
                     unencodable_policy=args.unencodable_policy,
+                    reasoning_selector=args.reasoning_selector,
                     packing=False, special_ids=SPECIAL_IDS, workers=args.workers,
                     loss_roles=args.loss_roles,
                     tokenizer_sha256=sha256(tokenizer_dir / "tokenizer.json"),

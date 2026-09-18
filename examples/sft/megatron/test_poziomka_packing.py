@@ -146,5 +146,68 @@ class PackingTests(unittest.TestCase):
         self.assertNotIn("cu_seqlens", sample)
 
 
+
+class ReasoningSelectorTests(unittest.TestCase):
+    """The selector decides how much reasoning survives a given window.
+
+    largest-first sheds a whole 9k trace to save 300 tokens; smallest-sufficient
+    sheds the smallest block that closes the gap. Needs the real tokenizer, so
+    these are skipped when it is not available.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from poziomka_data import load_tokenizer
+        root = Path(__file__).resolve().parents[3]
+        tokenizer_dir = root / "poziomka-linear-8-9-10-11-sqrt"
+        if not tokenizer_dir.exists():
+            raise unittest.SkipTest(f"No tokenizer at {tokenizer_dir}")
+        template = (Path(__file__).with_name("poziomka_chatml.jinja")).read_text()
+        cls.tokenizer = load_tokenizer(tokenizer_dir, template)
+
+    def record(self):
+        # One huge trace and one small one; only a little needs to go.
+        return {"reasoning_profile": "on", "messages": [
+            {"role": "user", "content": "Pytanie"},
+            {"role": "assistant", "content": "Pierwsza", "reasoning_content": "myśl " * 400},
+            {"role": "user", "content": "Drugie"},
+            {"role": "assistant", "content": "Druga", "reasoning_content": "krótko " * 20}]}
+
+    def surviving_reasoning(self, changed):
+        return sum(len(self.tokenizer(m["reasoning_content"], add_special_tokens=False)["input_ids"])
+                   for m in changed["messages"]
+                   if m["role"] == "assistant" and m.get("reasoning_content"))
+
+    def test_smallest_sufficient_keeps_more_reasoning(self):
+        from prepare_poziomka_sft import remove_reasoning_to_fit
+        record = self.record()
+        ids, _ = remove_reasoning_to_fit(self.tokenizer, record, 10 ** 9, ("all",))[1:3]
+        # A window just under the full length: only the small block need go.
+        budget = len(ids) - 10
+        small, _, _, small_removed = remove_reasoning_to_fit(
+            self.tokenizer, record, budget, ("all",), "smallest-sufficient")
+        large, _, _, large_removed = remove_reasoning_to_fit(
+            self.tokenizer, record, budget, ("all",), "largest-first")
+        self.assertGreater(self.surviving_reasoning(small), self.surviving_reasoning(large))
+        self.assertEqual(len(small_removed), 1)
+        self.assertEqual(len(large_removed), 1)
+        # Smallest-sufficient sheds the short trace; largest-first sheds the long one.
+        self.assertEqual(small_removed[0]["message_index"], 3)
+        self.assertEqual(large_removed[0]["message_index"], 1)
+
+    def test_both_selectors_make_the_record_fit(self):
+        from prepare_poziomka_sft import remove_reasoning_to_fit
+        for selector in ("smallest-sufficient", "largest-first"):
+            _, ids, _, _ = remove_reasoning_to_fit(
+                self.tokenizer, self.record(), 200, ("all",), selector)
+            self.assertLessEqual(len(ids), 201, selector)
+
+    def test_largest_first_is_still_available_for_rebuilds(self):
+        """Old caches must remain reproducible: the previous order is unchanged."""
+        from prepare_poziomka_sft import remove_reasoning_to_fit
+        _, _, _, removed = remove_reasoning_to_fit(
+            self.tokenizer, self.record(), 50, ("all",), "largest-first")
+        self.assertEqual([r["message_index"] for r in removed], [1, 3])
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
