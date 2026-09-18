@@ -16,6 +16,8 @@ import sys
 import torch
 
 # Poziomka attention shape: 16 heads, 4 KV groups (GQA), head_dim 128.
+# thd accepts only padding/padding_causal masks; Megatron substitutes this
+# automatically for packed sequences (extensions/transformer_engine.py:928).
 HEADS, KV_GROUPS, HEAD_DIM = 16, 4, 128
 SEQUENCES = [4096, 2048, 8192, 2048]  # four conversations packed into one 16384 window
 
@@ -47,7 +49,7 @@ def main():
 
     attention = DotProductAttention(
         num_attention_heads=HEADS, kv_channels=HEAD_DIM,
-        num_gqa_groups=KV_GROUPS, attn_mask_type="causal",
+        num_gqa_groups=KV_GROUPS, attn_mask_type="padding_causal",
         qkv_format="thd", attention_dropout=0.0).to(device)
 
     def run(k, v):
@@ -55,13 +57,14 @@ def main():
             return attention(query, k, v, qkv_format="thd",
                              cu_seqlens_q=cu_seqlens, cu_seqlens_kv=cu_seqlens,
                              max_seqlen_q=max(SEQUENCES), max_seqlen_kv=max(SEQUENCES),
-                             attn_mask_type="causal")
+                             attn_mask_type="padding_causal")
 
     try:
         baseline = run(key, value)
     except Exception as exc:
         print(f"\nFAIL: thd attention raised: {type(exc).__name__}: {exc}")
-        print("Try NVTE_FUSED_ATTN=1 (thd generally needs the cuDNN backend).")
+        print("If this is a backend error rather than a shape/mask error, try")
+        print("NVTE_FUSED_ATTN=1: thd prefers the cuDNN kernel.")
         return 1
     print(f"\nthd forward OK: output {tuple(baseline.shape)}, dtype {baseline.dtype}")
 
