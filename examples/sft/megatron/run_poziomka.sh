@@ -13,17 +13,6 @@ MEGATRON_PATH="${MEGATRON_PATH:-${REPO_DIR}/Megatron-LM-core_v0.13.0}"
 SEQ_LENGTH="${SEQ_LENGTH:-8192}"
 GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-128}"
 
-# Activation recomputation trades memory for throughput. 'full' is the original
-# setting and stays the default, so existing runs are unchanged. Megatron asserts
-# recompute-method is unset for 'selective', so these cannot simply be appended.
-case "${RECOMPUTE:-full}" in
-    full) RECOMPUTE_ARGS=(--recompute-granularity full --recompute-method uniform
-                          --recompute-num-layers "${RECOMPUTE_NUM_LAYERS:-1}") ;;
-    selective) RECOMPUTE_ARGS=(--recompute-granularity selective) ;;
-    none) RECOMPUTE_ARGS=() ;;
-    *) echo "RECOMPUTE must be full, selective or none" >&2; exit 1 ;;
-esac
-
 [[ -f "${MEGATRON_PATH}/pretrain_gpt.py" ]] || { echo "Missing patched Megatron checkout" >&2; exit 1; }
 [[ -f "${SFT_DATA}/manifest.json" ]] || { echo "Missing completed SFT manifest" >&2; exit 1; }
 [[ -f "${LOAD_CHECKPOINT}/latest_checkpointed_iteration.txt" ]] || { echo "Missing DCP tracker" >&2; exit 1; }
@@ -70,7 +59,7 @@ torchrun --standalone --nproc_per_node=8 "${SCRIPT_DIR}/train_poziomka_sft.py" \
     --moe-router-bias-update-rate "${ROUTER_BIAS_UPDATE_RATE:-0}" \
     --moe-z-loss-coeff 0.0000035 --bias-zero-mean-update \
     --moe-permute-fusion --cross-entropy-loss-fusion --cross-entropy-fusion-impl native \
-    ${RECOMPUTE_ARGS[@]+"${RECOMPUTE_ARGS[@]}"} \
+    --recompute-granularity full --recompute-method uniform --recompute-num-layers 1 \
     --dataloader-type single --num-workers "${DATALOADER_WORKERS:-2}" \
     --no-create-attention-mask-in-dataloader --attention-backend flash \
     --attention-softmax-in-fp32 --no-masked-softmax-fusion \

@@ -19,10 +19,10 @@ SCRATCH="${SCRATCH:-/tmp/poziomka_seqlen_smoke}"
 GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-16}"   # >= pipeline depth, so 1F1B is realistic
 ITERS="${ITERS:-3}"
 KEEP="${KEEP:-0}"
-# Activation recomputation: 'full' (least memory, ~30% slower), 'selective'
-# (attention only), 'none' (fastest, most memory). Space-separated to compare.
-RECOMPUTE_MODES="${RECOMPUTE_MODES:-${RECOMPUTE:-full}}"
+# Full recompute is not optional at these lengths: selective and none both OOM
+# at 16384 on 24 GB cards, so run_poziomka.sh keeps it hardcoded.
 PROJECT_ITERS="${PROJECT_ITERS:-1718}"         # full-corpus run length, for the projection
+PROJECT_BATCH="${PROJECT_BATCH:-768}"          # batch the projection assumes
 LENGTHS=("$@")
 [[ ${#LENGTHS[@]} -gt 0 ]] || LENGTHS=(8192 12288 16384 24576 32768)
 
@@ -70,14 +70,10 @@ for length in "${LENGTHS[@]}"; do
             --seq-length "${length}" --workers 2 --long-policy truncate \
             > "${SCRATCH}/prepare_${length}.log" 2>&1; then
         echo "PREPARE FAILED (see ${SCRATCH}/prepare_${length}.log)"
-        RESULTS+=("${length}|-|prepare failed|-|-|-")
+        RESULTS+=("${length}|prepare failed|-|-|-")
         continue
     fi
-
-for mode in ${RECOMPUTE_MODES}; do
-    log="${SCRATCH}/train_${length}_${mode}.log"
-    rm -rf "${save}"
-    echo "-- recompute=${mode}"
+    log="${SCRATCH}/train_${length}.log"
 
     # Later flags win in argparse, so this overrides the 8192 in poziomka_model_args.sh.
     # EVAL_ITERS=1 mirrors the known-good run 2 config: vary only seq_length, so a
@@ -89,7 +85,6 @@ for mode in ${RECOMPUTE_MODES}; do
         SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
         SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
         EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
-        RECOMPUTE="${mode}" \
             bash "${SCRIPT_DIR}/run_poziomka.sh" \
                 --max-position-embeddings "${length}" 2>&1 \
             | tee "${log}" \
@@ -101,7 +96,6 @@ for mode in ${RECOMPUTE_MODES}; do
         SFT_DATA="${cache}" LOAD_CHECKPOINT="${LOAD_CHECKPOINT}" SAVE_CHECKPOINT="${save}" \
         SEQ_LENGTH="${length}" TRAIN_ITERS="${ITERS}" GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE}" \
         EVAL_ITERS=1 EVAL_INTERVAL=1000000 SAVE_INTERVAL=1000000 RESUME=0 \
-        RECOMPUTE="${mode}" \
             bash "${SCRIPT_DIR}/run_poziomka.sh" \
                 --max-position-embeddings "${length}" \
             > "${log}" 2>&1
@@ -132,13 +126,18 @@ PY
         echo "OK   peak reserved ${peak} MiB on rank ${hottest} of ${CAPACITY:-?} MiB"
         echo "     per rank: ${per_rank}"
         if [[ -n "${secs}" ]]; then
-            echo "     ${secs} s/iteration -> ${PROJECT_ITERS} iters =" \
-                 "$(awk -v s="${secs}" -v n="${PROJECT_ITERS}" 'BEGIN{printf "%.1f days", s*n/86400}')"
+            # Microbatch is 1, so step time scales with the microbatch count:
+            # rescale this batch's timing to the batch the real run would use.
+            # LC_ALL=C keeps awk from emitting comma decimals under a pl_PL locale.
+            echo "     ${secs} s/iter at batch ${GLOBAL_BATCH_SIZE} ->" \
+                 "$(LC_ALL=C awk -v s="${secs}" -v n="${PROJECT_ITERS}" \
+                    -v b="${PROJECT_BATCH}" -v g="${GLOBAL_BATCH_SIZE}" \
+                    'BEGIN{printf "%.1f days for %d iters at batch %d", s*(b/g)*n/86400, n, b}')"
         fi
-        RESULTS+=("${length}|${mode}|OK (rank ${hottest})|${peak}|${secs:--}|-")
+        RESULTS+=("${length}|OK (rank ${hottest})|${peak}|${secs:--}|-")
     elif grep -qi "out of memory\|CUDA out of memory" "${log}"; then
         echo "OOM  (${log})"
-        RESULTS+=("${length}|${mode}|OOM|${peak:--}|-|-")
+        RESULTS+=("${length}|OOM|${peak:--}|-|-")
     else
         echo "FAILED exit ${status} (${log}) -- last lines:"
         # A non-OOM failure is a setup problem, not an answer about this length.
@@ -146,34 +145,35 @@ PY
         grep -iE "error|Error|Traceback|assert|raise |Exception" "${log}" | tail -15 | sed 's/^/    /'
         echo "    ---"
         tail -20 "${log}" | sed 's/^/    /'
-        RESULTS+=("${length}|${mode}|failed exit ${status}|${peak:--}|-|-")
+        RESULTS+=("${length}|failed exit ${status}|${peak:--}|-|-")
         if [[ "${STOP_ON_FAILURE:-1}" == 1 ]]; then
             echo
             echo "Stopping: this is a setup failure, not a memory limit."
             echo "Fix it, or re-run with STOP_ON_FAILURE=0 to sweep anyway."
-            break 2
+            break
         fi
     fi
-    [[ "${KEEP}" == 1 ]] || rm -rf "${save}"
-done
-    [[ "${KEEP}" == 1 ]] || rm -rf "${cache}"
+    [[ "${KEEP}" == 1 ]] || rm -rf "${cache}" "${save}"
 done
 
 echo
-fmt='%-11s %-10s %-18s %-12s %-10s %-10s %s\n'
+fmt='%-11s %-18s %-12s %-10s %-12s %s\n'
 # shellcheck disable=SC2059
-printf "${fmt}" "seq-length" "recompute" "result" "peak (MiB)" "headroom" "s/iter" "${PROJECT_ITERS} iters"
-printf "${fmt}" "----------" "---------" "------" "----------" "--------" "------" "------------"
+printf "${fmt}" "seq-length" "result" "peak (MiB)" "headroom" \
+       "s/iter@${GLOBAL_BATCH_SIZE}" "${PROJECT_ITERS} iters@${PROJECT_BATCH}"
+printf "${fmt}" "----------" "------" "----------" "--------" "------------" "----------------"
 for row in "${RESULTS[@]}"; do
-    IFS='|' read -r length mode result peak secs _ <<< "${row}"
+    IFS='|' read -r length result peak secs _ <<< "${row}"
     headroom="-"; projected="-"
     if [[ -n "${CAPACITY}" && "${peak}" != "-" ]]; then
-        headroom=$(awk -v p="${peak}" -v c="${CAPACITY}" 'BEGIN{printf "%.0f%%", 100*p/c}')
+        headroom=$(LC_ALL=C awk -v p="${peak}" -v c="${CAPACITY}" 'BEGIN{printf "%.0f%%", 100*p/c}')
     fi
     if [[ "${secs}" != "-" && -n "${secs}" ]]; then
-        projected=$(awk -v s="${secs}" -v n="${PROJECT_ITERS}" 'BEGIN{printf "%.1f days", s*n/86400}')
+        projected=$(LC_ALL=C awk -v s="${secs}" -v n="${PROJECT_ITERS}" \
+                    -v b="${PROJECT_BATCH}" -v g="${GLOBAL_BATCH_SIZE}" \
+                    'BEGIN{printf "%.1f days", s*(b/g)*n/86400}')
     fi
-    printf "${fmt}" "${length}" "${mode}" "${result}" "${peak}" "${headroom}" "${secs}" "${projected}"
+    printf "${fmt}" "${length}" "${result}" "${peak}" "${headroom}" "${secs}" "${projected}"
 done
 echo
 echo "Logs in ${SCRATCH}. Peak is the worst rank, reported after iteration 1."
