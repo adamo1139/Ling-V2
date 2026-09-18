@@ -4,7 +4,8 @@
 POZIOMKA_MODEL_ARGS=(
     --num-layers 16 --hidden-size 2048 --ffn-hidden-size 2048
     --num-attention-heads 16 --num-query-groups 4 --group-query-attention --qk-layernorm
-    --max-position-embeddings 8192 --vocab-size 32000 --make-vocab-size-divisible-by 128
+    --max-position-embeddings "${MAX_POSITION_EMBEDDINGS:-8192}"
+    --vocab-size 32000 --make-vocab-size-divisible-by 128
     --position-embedding-type rope --rotary-base 84000 --rotary-percent 0.5
     --swiglu --untie-embeddings-and-output-weights --normalization RMSNorm
     --norm-epsilon 1e-6 --disable-bias-linear --transformer-impl transformer_engine
