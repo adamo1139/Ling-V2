@@ -12,6 +12,10 @@ source "${SCRIPT_DIR}/poziomka_model_args.sh"
 MEGATRON_PATH="${MEGATRON_PATH:-${REPO_DIR}/Megatron-LM-core_v0.13.0}"
 SEQ_LENGTH="${SEQ_LENGTH:-8192}"
 GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-128}"
+# Off by default so runs 1 and 2 replay exactly. PACKING=1 packs several
+# conversations per sequence with thd attention; requires micro-batch 1.
+PACKING_ARGS=()
+[[ "${PACKING:-0}" == 1 ]] && PACKING_ARGS=(--sft-packing)
 
 [[ -f "${MEGATRON_PATH}/pretrain_gpt.py" ]] || { echo "Missing patched Megatron checkout" >&2; exit 1; }
 [[ -f "${SFT_DATA}/manifest.json" ]] || { echo "Missing completed SFT manifest" >&2; exit 1; }
@@ -67,4 +71,4 @@ torchrun --standalone --nproc_per_node=8 "${SCRIPT_DIR}/train_poziomka_sft.py" \
     --no-save-optim --no-save-rng --async-save \
     --save-interval "${SAVE_INTERVAL:-100}" --eval-interval "${EVAL_INTERVAL:-100}" \
     --eval-iters "${EVAL_ITERS:-10}" --log-interval 1 --no-one-logger \
-    "${LOAD_ARGS[@]}" "$@"
+    ${PACKING_ARGS[@]+"${PACKING_ARGS[@]}"} "${LOAD_ARGS[@]}" "$@"
