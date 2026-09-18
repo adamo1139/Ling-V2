@@ -41,11 +41,12 @@ export EVAL_ITERS=1
 export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
 
-# One pass over the PACKED cache. Packing decides the sequence count at startup,
-# so this is an estimate from the length survey (~410,200 sequences / 768).
-# The trainer prints the real count as "SFT: ... packed into N sequences" -- check
-# it on the first launch and correct TRAIN_ITERS before committing to the full run.
-export TRAIN_ITERS=534
+# One pass over the PACKED cache: ceil(410,792 / 768) = 535. The plan is
+# deterministic from record lengths and seed 42, so this was computed offline from
+# the built cache, not estimated. The trainer prints the same count at startup as
+# "SFT: ... packed into N sequences"; if it disagrees, stop and find out why before
+# spending three days. Recalculate if the cache, seed or batch size changes.
+export TRAIN_ITERS=535
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
