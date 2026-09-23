@@ -76,10 +76,10 @@ def survey_shard(job):
             dict(stats))
 
 
-def discover(root):
+def discover(root, splits=("train", "validation")):
     root = Path(root)
     jobs = []
-    for split in ("train", "validation"):
+    for split in splits:
         files = sorted((root / split).glob("*.jsonl")) or sorted((root / split).glob("*.parquet"))
         if not files:
             raise ValueError(f"No JSONL/Parquet files under {root / split}")
@@ -178,6 +178,8 @@ def report(split, lengths, reasoning, stripped_len, stripped_at, candidates, out
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Directory with train/ and validation/")
+    parser.add_argument("--split", nargs="+", choices=("train", "validation"), default=["train", "validation"],
+                        help="Which splits to survey (default: both)")
     parser.add_argument("--tokenizer", type=Path, required=True)
     parser.add_argument("--chat-template", type=Path,
                         default=Path(__file__).with_name("poziomka_chatml.jinja"))
@@ -200,7 +202,7 @@ def main():
     encode_record(tokenizer, {"messages": [{"role": "user", "content": "Pytanie"},
                                            {"role": "assistant", "content": "Odpowiedź"}]},
                   args.loss_roles)
-    sources = discover(args.input)
+    sources = discover(args.input, args.split)
     jobs = [(str(path), split, args.sample_every, args.stripped_floor) for split, path in sources]
 
     started = time.monotonic()
@@ -224,7 +226,7 @@ def main():
 
     out = []
     arrays = {}
-    for split in ("train", "validation"):
+    for split in args.split:
         if split not in collected:
             continue
         lengths, reasoning, stripped_len, stripped_at = (

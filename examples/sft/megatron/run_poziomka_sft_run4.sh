@@ -16,7 +16,8 @@ set -euo pipefail
 #                             clean data to confirm the data was the cause.
 #   100 steps, not 535     -- a probe, not a full run: enough for a loss curve
 #                             and a checkpoint to sample for looping.
-#   EVAL_INTERVAL 50       -- one mid-run eval point; run 3 evaluated every 100.
+#   EVAL_INTERVAL 20       -- eval every 20 steps for a fine-grained loss curve;
+#                             run 3 evaluated every 100.
 #
 # Everything else is run 3 verbatim: same starting weights (run 2 @ iter 1718),
 # same 16384 window, same 640000 RoPE base, same packing, same LR and batch.
@@ -44,7 +45,7 @@ export GLOBAL_BATCH_SIZE=768
 export LR=3e-4
 export WARMUP_ITERS=0
 export SAVE_INTERVAL=100
-export EVAL_INTERVAL=50
+export EVAL_INTERVAL=20
 export EVAL_ITERS=1
 export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
@@ -64,7 +65,7 @@ export WANDB_MODE="online"
     echo "No cache at ${SFT_DATA}. Build it first:" >&2
     echo "  python3 ${SCRIPT_DIR}/prepare_poziomka_sft.py \\" >&2
     echo "    --input <v12-export> --tokenizer ${WORK_DIR}/poziomka-linear-8-9-10-11-sqrt \\" >&2
-    echo "    --output ${SFT_DATA} --seq-length 16384 --long-policy truncate --workers 15" >&2
+    echo "    --output ${SFT_DATA} --seq-length 16384 --long-policy truncate --workers 10" >&2
     exit 1; }
 
 # The cache must match the training length, and must be the truncate cache.

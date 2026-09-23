@@ -15,7 +15,7 @@ bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run4.sh
 |---|---|---|
 | Corpus | v11 (loops present) | v12 (loops removed) |
 | Iterations | 535 | 100 (probe) |
-| Eval interval | 100 | 50 |
+| Eval interval | 100 | 20 |
 | Everything else | -- | identical |
 
 Identical means: same starting weights (run 2 @ iter 1718), 16,384 window,
@@ -66,7 +66,7 @@ schedule, only the corpus differs.
 python3 Ling-V2/examples/sft/megatron/prepare_poziomka_sft.py \
   --input <v12-export> --tokenizer poziomka-linear-8-9-10-11-sqrt \
   --output poziomka-sft-cache-v12-16384-truncate \
-  --seq-length 16384 --long-policy truncate --workers 15
+  --seq-length 16384 --long-policy truncate --workers 10
 ```
 
 Truncate stays the right long policy: v12 keeps v11's length shape (the removed
