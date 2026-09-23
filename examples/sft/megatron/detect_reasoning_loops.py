@@ -101,10 +101,10 @@ Detektor znakowy ma wlasne progi i reguly, wykalibrowane pomiarowo na v11:
                                   "-----"); zera w liczbach, blanki "____"
                                   i linie separatorow to legalne powtorzenia
                                   pojedynczego znaku i siegaja ~70 znakow
-    MIN_WS_RUN = 64               najdluzszy ciag bialych znakow; na v11
-                                  zdrowy tekst konczy sie na 48 znakach
-                                  (p99=22), degeneracja "\n\n\n..." zaczyna
-                                  sie od setek
+    MIN_WS_RUN = 200              najdluzszy ciag bialych znakow; zdrowy
+                                  tekst konczy sie na 48 (walidacja) i 124
+                                  (trening: padding ASCII-art, szablony),
+                                  degeneracja "\n\n\n..." zaczyna sie od setek
 
 Dwie reguly wynikaja z pomiarow na v11. Po pierwsze, biale znaki sa sciskane
 do pojedynczej spacji przed analiza: wcicie kodu to 20+ identycznych spacji
@@ -140,6 +140,8 @@ UZYCIE
 """
 import argparse
 import json
+import sys
+import time
 from collections import Counter
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -181,11 +183,12 @@ MAX_CHAR_PERIOD = 16
 MIN_CHARS = 16
 
 # Najdluzszy ciag samych bialych znakow (spacje, taby, nowe linie -- tez moga
-# tworzyac petle, np. nieskonczone "\n\n\n..."). Zdrowy tekst ma tu mniej niz
-# 50: najglebsze wciecia kodu i wyrownania tabel na v11 koncza sie na 48
-# (p99=22). Degeneracja typu "model wypuscil 2000 spacji" zaczyna sie tam,
-# gdzie zdrowia juz nie widziano.
-MIN_WS_RUN = 64
+# tworzyac petle, np. nieskonczone "\n\n\n..."). Zdrowy tekst konczy sie na
+# 48 znakach w walidacji v11 (p99=22) i na 124 w treningu (padding ASCII-art
+# w blokach kodu, szablony z wcieciami, ramki print) -- progi 64-124 okazaly
+# sie falszywymi alarmami. Degeneracja typu "model wypuscil 2000 spacji"
+# zaczyna sie od setek, wiec 200 siedzi w szerokiej luce.
+MIN_WS_RUN = 200
 
 # Prog max_gram skaluje sie z dlugoscia tekstu: flagujemy, gdy najczestszy
 # 4-gram zajmuje co najmniej tyle tekstu (max_gram >= MAX_GRAM_SHARE * slow).
@@ -425,24 +428,29 @@ def iter_records(root, split):
                         yield json.loads(line)
 
 
-def analyse_record(record, thresholds=None):
-    """Jeden rekord -> lista wynikow dla kazdej wiadomosci z rozumowaniem.
+def analyse_record(record, thresholds=None, fields=("reasoning",)):
+    """Jeden rekord -> lista wynikow dla kazdego skanowanego tekstu.
 
     Osobna funkcja na poziomie modulu, zeby dala sie uzyc w multiprocessing.Pool
-    (przez functools.partial, ktory jest picklowalny).
+    (przez functools.partial, ktory jest picklowalny). Pole "reasoning" to
+    reasoning_content wiadomosci asystenta; "content" to tresc wiadomosci
+    kazdej roli (user, assistant, system, tool).
     """
     thresholds = thresholds or {}
     record_id = record.get("record_id")
     results = []
     for index, message in enumerate(record.get("messages") or []):
-        if message.get("role") != "assistant":
-            continue
-        text = message.get("reasoning_content")
-        if not text:
-            continue
-        verdict = detect_loop(text, **thresholds)
-        results.append((record_id, index, verdict,
-                        verdict.excerpt(text) if verdict.is_loop else ""))
+        texts = []
+        if "reasoning" in fields and message.get("role") == "assistant":
+            texts.append(("reasoning", message.get("reasoning_content")))
+        if "content" in fields:
+            texts.append(("content", message.get("content")))
+        for field, text in texts:
+            if not text:
+                continue
+            verdict = detect_loop(text, **thresholds)
+            results.append((record_id, index, field, verdict,
+                            verdict.excerpt(text) if verdict.is_loop else ""))
     return results
 
 
@@ -473,6 +481,10 @@ def main():
                         help="Detektor znakowy: jak wyzej, dla okresu 1 (jeden znak)")
     parser.add_argument("--min-ws-run", type=int, default=MIN_WS_RUN,
                         help="Najdluzszy ciag bialych znakow uznany za petle")
+    parser.add_argument("--fields", default="reasoning",
+                        help="Ktore pola wiadomosci skanowac: reasoning (domyslnie), "
+                             "content (tresc user/assistant/system), all (oba); "
+                             "koma-rozdzielone")
     parser.add_argument("--workers", type=int, default=1,
                         help="Procesy robocze; przy pelnym splicie treningowym ustaw 8+")
     parser.add_argument("--examples", type=int, default=3,
@@ -493,13 +505,21 @@ def main():
                              "uwaga: sortowanie trzyma wszystkie pasujace wiersze w pamieci")
     args = parser.parse_args()
 
+    fields = tuple(f.strip() for f in args.fields.split(",") if f.strip())
+    if fields == ("all",):
+        fields = ("reasoning", "content")
+    unknown = set(fields) - {"reasoning", "content"}
+    if unknown:
+        raise SystemExit(f"--fields: nieznane pola {sorted(unknown)}; "
+                         f"dostepne: reasoning, content, all")
+
     from functools import partial
     thresholds = dict(min_cycles=args.min_cycles, max_gram_threshold=args.max_gram,
                       max_gram_share=args.max_gram_share,
                       min_char_cycles=args.min_char_cycles, min_char_run=args.min_char_run,
                       min_char_run_single=args.min_char_run_single,
                       min_ws_run=args.min_ws_run)
-    worker = partial(analyse_record, thresholds=thresholds)
+    worker = partial(analyse_record, thresholds=thresholds, fields=fields)
 
     records = iter_records(args.input, args.split)
     if args.limit:
@@ -522,6 +542,7 @@ def main():
     messages = loops = conversations = char_only = ws_only = 0
     loop_words = total_words = 0
     report = args.report.open("w", encoding="utf-8") if args.report else None
+    started = time.monotonic()
 
     if args.samples:
         # wczesna walidacja: zle wyrazenie ma walic od razu, nie w polowie splitu
@@ -529,7 +550,7 @@ def main():
                      run_period=1, run_start=0, max_gram=1, rep4=0.0,
                      char_cycles=1, char_run=1, char_period=1, char_start=0,
                      ws_run=1, ws_start=0, words=1, reason="x", record_id="x",
-                     message_index=0, excerpt="x")
+                     message_index=0, field="reasoning", excerpt="x")
         try:
             eval(args.sample_filter, {"__builtins__": {}}, dict(probe))
         except Exception as error:
@@ -538,7 +559,12 @@ def main():
 
     for results in stream:
         conversations += 1
-        for record_id, index, verdict, excerpt in results:
+        if conversations % 2000 == 0:
+            # postep na stderr, zeby nie mieszal sie z raportem na stdout
+            elapsed = time.monotonic() - started
+            print(f"przetworzone rozmowy: {conversations:,} "
+                  f"({conversations / elapsed:,.0f}/s)", file=sys.stderr, flush=True)
+        for record_id, index, field, verdict, excerpt in results:
             messages += 1
             cycles_all.append(verdict.cycles)
             run_lengths.append(verdict.run_length)
@@ -550,7 +576,8 @@ def main():
             total_words += verdict.words
             if report or args.samples:
                 row = asdict(verdict)
-                row.update(record_id=record_id, message_index=index, excerpt=excerpt)
+                row.update(record_id=record_id, message_index=index, field=field,
+                           excerpt=excerpt)
                 if report:
                     report.write(json.dumps(row, ensure_ascii=False) + "\n")
                 try:
@@ -568,7 +595,7 @@ def main():
                 loops += 1
                 loop_words += verdict.words
                 looping_ids.add(record_id)
-                looping_messages.add((record_id, index))
+                looping_messages.add((record_id, index, field))
                 if verdict.decided_by == "chars":
                     char_only += 1
                 elif verdict.decided_by == "ws":
@@ -585,7 +612,7 @@ def main():
         report.close()
 
     print(f"rozmow przejrzanych:        {conversations:,}")
-    print(f"wiadomosci z rozumowaniem:  {messages:,}")
+    print(f"przeskanowanych tekstow:    {messages:,}")
     print(f"z petla:                    {loops:,} "
           f"({100 * loops / max(messages, 1):.2f}% wiadomosci)")
     print(f"wykryte tylko znakowo:      {char_only:,} "
@@ -593,7 +620,7 @@ def main():
     print(f"wykryte przez whitespace:   {ws_only:,}")
     print(f"rekordow do odrzucenia:     {len(looping_ids):,} "
           f"({100 * len(looping_ids) / max(conversations, 1):.2f}% rozmow)")
-    print(f"slowa rozumowania w petlach:{loop_words:>12,} z {total_words:,} "
+    print(f"slowa w petlach:            {loop_words:>12,} z {total_words:,} "
           f"({100 * loop_words / max(total_words, 1):.1f}%)")
     print(f"\nprogi: cycles >= {args.min_cycles}, max_gram >= {args.max_gram} "
           f"(lub >= {args.max_gram_share:.0%} tekstu), "
@@ -638,9 +665,10 @@ def main():
 
     if args.save_ids:
         args.save_ids.write_text(
-            "".join(f"{rid}\t{idx}\n" for rid, idx in sorted(looping_messages) if rid),
+            "".join(f"{rid}\t{idx}\t{field}\n"
+                    for rid, idx, field in sorted(looping_messages) if rid),
             encoding="utf-8")
-        print(f"\n{len(looping_messages):,} wiadomosci (record_id + indeks) zapisane do {args.save_ids}")
+        print(f"\n{len(looping_messages):,} tekstow (record_id + indeks + pole) zapisane do {args.save_ids}")
     if args.report:
         print(f"raport per wiadomosc: {args.report}")
 
