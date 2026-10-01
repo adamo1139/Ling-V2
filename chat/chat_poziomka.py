@@ -4,8 +4,9 @@
 Uruchomienie: python3 chat_poziomka.py --help
 Rozumowanie jest domyslnie wlaczone; wylacza je --thinking off.
 
-Adres serwera bierzemy z pliku .env obok tego skryptu (POZIOMKA_BASE_URL albo
-SGLANG_BASE_URL), bo adres maszyny z GPU jest wlasciwoscia stanowiska, a nie
+Adres serwera bierzemy z pliku .env - obok tego skryptu albo w korzeniu repo
+(POZIOMKA_BASE_URL albo SGLANG_BASE_URL), bo adres maszyny z GPU jest
+wlasciwoscia stanowiska, a nie
 kodu - wpisany na sztywno wymuszalby edycje pliku na kazdej nowej maszynie
 i ladowal w commitach. Prawdziwa zmienna srodowiskowa ma pierwszenstwo nad
 .env, a --base-url nad obiema.
@@ -24,7 +25,7 @@ DOMYSLNY_BASE_URL = "http://127.0.0.1:30000"
 # identyczne (md5 c303c886), wiec do samego renderowania promptu wystarczy
 # dowolny z nich; bierzemy najnowszy, zeby nie utrwalac martwej sciezki.
 TOKENIZER_PATH = (
-    Path(__file__).resolve().parent
+    Path(__file__).resolve().parent.parent
     / "poziomka_sft_2026_09_24_hf/iter_0000100"
 )
 # Sampling dobrany pod serwer z oknem 16384 i RoPE 640000 - ten sam zestaw,
@@ -70,15 +71,25 @@ THINKING = {"on": True, "off": False, "auto": None}
 CONTEXT_BUFFER = 32  # Leave headroom below the server's context boundary.
 
 
-def wczytaj_dotenv(path=None):
-    """Minimalny czytnik .env; prawdziwe zmienne srodowiskowe maja pierwszenstwo.
+def sciezki_dotenv():
+    """Najpierw .env obok skryptu, potem w korzeniu repo.
 
-    Pliku szukamy obok skryptu, a nie w katalogu roboczym, zeby czat dzialal
-    tak samo niezaleznie od tego, skad go uruchomiono.
+    Szukamy wzgledem polozenia pliku, a nie katalogu roboczego, zeby czat
+    dzialal tak samo niezaleznie od tego, skad go uruchomiono. Korzen repo
+    jest w zestawie, bo tam zwykle juz lezy .env calego stanowiska.
     """
-    path = Path(path) if path else Path(__file__).resolve().parent / ".env"
-    if not path.exists():
-        return
+    katalog = Path(__file__).resolve().parent
+    return [katalog / ".env", katalog.parent / ".env"]
+
+
+def wczytaj_dotenv(path=None):
+    """Minimalny czytnik .env; prawdziwe zmienne srodowiskowe maja pierwszenstwo."""
+    for kandydat in ([Path(path)] if path else sciezki_dotenv()):
+        if kandydat.exists():
+            _wczytaj_plik(kandydat)
+
+
+def _wczytaj_plik(path):
     for line in path.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
