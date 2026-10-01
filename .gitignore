@@ -100,3 +100,6 @@ flake.lock
 /default.nix
 
 # Before adding new lines, see the comment at the top.
+
+# Adres serwera i inne ustawienia stanowiska (patrz .env.example).
+.env
