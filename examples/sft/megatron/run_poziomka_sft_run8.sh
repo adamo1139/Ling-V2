@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run 6: powtorka run 5 (GBS 64, LR 3e-4, 212 krokow) na cache v13. Run 5 mial
-# think ON i OFF nieodroznialne (OFF jako '<think>\n</think>\n' w tresci), wiec
-# enable_thinking=True nie dzialalo; do tego zapis DCP wyzerowal q_layernorm.
+# Run 8: GBS 32, LR 2,5e-4, jedna epoka (423 kroki) na cache v13. Trzeci model do
+# merge'a z run 6 (GBS 64, 3e-4) i run 7 (GBS 16, 2e-4); LR posrodku miedzy nimi.
 #
 # Dane: cache v13 (poziomka_v13_chat_template.jinja). OFF renderuje sie jako
 # '<think></think>\n', ON jako '<think>\n...'. Po <think> nastepny token to
@@ -12,9 +11,9 @@ set -euo pipefail
 # nieodroznialne i enable_thinking=True nie dzialalo. Eksport HF musi dostac
 # chat_template.jinja z tego cache, nie z v12.
 #
-# PP8 przy micro-batch 1 i 64 mikrobatchach na krok: banka pipeline'u 7/71 ~ 10%,
-# jak w run 5 (~37 s/krok, ~2,2 h).
-# Launch with: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run6.sh
+# PP8 przy micro-batch 1 i 32 mikrobatchach na krok: banka pipeline'u 7/39 ~ 18%
+# (run 6: ~10%, run 7: ~30%).
+# Launch with: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run8.sh
 # Edit run settings here; no caller environment variables are needed.
 #
 # Start z merge'a poziomka-instruct-2026-09-30-7 (wagi po run 3/4, RoPE 640000),
@@ -42,7 +41,7 @@ WORK_DIR="$(cd -- "${REPO_DIR}/.." && pwd)"
 export MEGATRON_PATH="${REPO_DIR}/Megatron-LM-core_v0.13.0"
 export SFT_DATA="${WORK_DIR}/poziomka-sft-cache-polskie-sprawy-v3-v13-16384"
 export LOAD_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka-instruct-2026-09-30-7-dcp"
-export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run6_polskie_sprawy_v3_v13_16384_gbs64"
+export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run8_polskie_sprawy_v3_v13_16384_gbs32"
 export RESUME=0
 
 export SEQ_LENGTH=16384
@@ -50,26 +49,26 @@ export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
 # Merge pochodzi z wag trenowanych na 640000 (run 3/4); 16384 wymaga >= 3,1e5.
 export ROTARY_BASE=640000
 export PACKING=1
-export GLOBAL_BATCH_SIZE=64
-export LR=3e-4
+export GLOBAL_BATCH_SIZE=32
+export LR=2.5e-4
 export WARMUP_ITERS=0
-# Co 25 krokow: 9 zapisow (~70 GB), pierwszy do sprawdzenia qk_norm po 25 krokach. Runy 6-8 ida po kolei na jednym dysku
+# Co 50 krokow: 9 zapisow (~70 GB). Runy 6-8 ida po kolei na jednym dysku
 # (~210 GB razem), wiec dluzsze runy zapisuja rzadziej.
-export SAVE_INTERVAL=25
-export EVAL_INTERVAL=20
-# Walidacja to 136 spakowanych sekwencji; 2 x 64 = 128.
-export EVAL_ITERS=2
+export SAVE_INTERVAL=50
+export EVAL_INTERVAL=40
+# Walidacja to 136 spakowanych sekwencji; 4 x 32 = 128.
+export EVAL_ITERS=4
 export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
 
-# Jedna epoka: 13,528 kubelkow po spakowaniu / 64 na krok = 211,4 -> 212,
+# Jedna epoka: 13,528 kubelkow po spakowaniu / 32 na krok = 422,75 -> 423,
 # policzone na cache v13 (OFF o jeden token krotsze niz w run 5, stad 13,528
-# zamiast 13,532). Ostatni batch zawija sie o 40 sekwencji.
-export TRAIN_ITERS=212
+# zamiast 13,532). Ostatni batch zawija sie o 8 sekwencji.
+export TRAIN_ITERS=423
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run6_polskie_sprawy_v3_v13_16384_packed_gbs64_lr3e-4_212steps"
+export WANDB_NAME="poziomka_sft_run8_polskie_sprawy_v3_v13_16384_packed_gbs32_lr2.5e-4_423steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {
