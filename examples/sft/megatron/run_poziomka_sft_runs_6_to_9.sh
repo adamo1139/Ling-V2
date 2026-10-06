@@ -48,8 +48,9 @@ for index in "${!RUNS[@]}"; do
     train_iters=$(launcher_value "${launcher}" TRAIN_ITERS)
 
     say "run ${run}: training (${train_iters} iters -> ${save_dir}), log ${LOG_DIR}/run${run}.log"
-    bash "${launcher}" > "${LOG_DIR}/run${run}.log" 2>&1
-    exit_code=$?
+    # Trening widoczny od razu w konsoli i zapisany do pliku; kod wyjscia z treningu, nie z tee.
+    bash "${launcher}" 2>&1 | tee "${LOG_DIR}/run${run}.log"
+    exit_code=${PIPESTATUS[0]}
     say "run ${run}: training process exited with code ${exit_code}; quiet ${QUIET_SECONDS}s"
     sleep "${QUIET_SECONDS}"
 
