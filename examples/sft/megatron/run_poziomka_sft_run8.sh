@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run 8: GBS 32, LR 2,5e-4, jedna epoka (423 kroki) na cache v13. Trzeci model do
-# merge'a z run 6 (GBS 64, 3e-4) i run 7 (GBS 16, 2e-4); LR posrodku miedzy nimi.
+# Run 8: GBS 32, LR 1,32e-4 + 20 krokow warmupu, jedna epoka (423 kroki), cache v13.
+# Trzeci model do merge'a z run 6 (GBS 64) i run 7 (GBS 16).
 #
 # Dane: cache v13 (poziomka_v13_chat_template.jinja). OFF renderuje sie jako
 # '<think></think>\n', ON jako '<think>\n...'. Po <think> nastepny token to
@@ -50,8 +50,15 @@ export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
 export ROTARY_BASE=640000
 export PACKING=1
 export GLOBAL_BATCH_SIZE=32
-export LR=2.5e-4
-export WARMUP_ITERS=0
+# LR skalibrowany do pretreningu (8192 x GBS 256 = 2,097,152 tokenow/krok, LR 3e-4,
+# pakowanie ~100%) regula pierwiastkowa dla Adama: LR = 3e-4 * sqrt(tokeny_SFT /
+# tokeny_pretreningu). Tokeny SFT na krok = 171,662,024 / 13,528 kubelkow = 12,689
+# prawdziwych tokenow na sekwencje (pakowanie 77,4%) x GBS; strata liczona na 99,75%
+# z nich. Warmup 20 krokow: momenty Adama startuja od zera (--no-load-optim), a w
+# run 5 drugi krok mial grad norm 4,55 przy 1,26 w pierwszym.
+# GBS 32: 406,0k tokenow/krok, 0,194 pretreningu -> 3e-4 * sqrt(0,194) = 1,32e-4.
+export LR=1.32e-4
+export WARMUP_ITERS=20
 # Co 50 krokow: 9 zapisow (~70 GB). Runy 6-8 ida po kolei na jednym dysku
 # (~210 GB razem), wiec dluzsze runy zapisuja rzadziej.
 export SAVE_INTERVAL=50
@@ -68,7 +75,7 @@ export TRAIN_ITERS=423
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run8_polskie_sprawy_v3_v13_16384_packed_gbs32_lr2.5e-4_423steps"
+export WANDB_NAME="poziomka_sft_run8_polskie_sprawy_v3_v13_16384_packed_gbs32_lr1.32e-4_wu20_423steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {

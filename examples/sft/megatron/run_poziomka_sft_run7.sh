@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run 7: GBS 16, LR 2e-4, jedna epoka (846 krokow) na cache v13. Drugi model do
+# Run 7: GBS 16, LR 9,33e-5 + 20 krokow warmupu, jedna epoka (846 krokow), cache v13. Drugi model do
 # merge'a wag z run 6 (GBS 64) i run 8 (GBS 32): ten sam start, te same dane i seed,
-# inna trajektoria (~200k prawdziwych tokenow na krok zamiast ~810k). LR wg
-# skalowania pierwiastkowego dla Adama byloby 3e-4 * sqrt(16/64) = 1,5e-4; 2e-4 to
-# swiadomie troche wiecej.
+# inna trajektoria (~200k prawdziwych tokenow na krok zamiast ~810k).
 #
 # Dane: cache v13 (poziomka_v13_chat_template.jinja). OFF renderuje sie jako
 # '<think></think>\n', ON jako '<think>\n...'. Po <think> nastepny token to
@@ -53,8 +51,15 @@ export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
 export ROTARY_BASE=640000
 export PACKING=1
 export GLOBAL_BATCH_SIZE=16
-export LR=2e-4
-export WARMUP_ITERS=0
+# LR skalibrowany do pretreningu (8192 x GBS 256 = 2,097,152 tokenow/krok, LR 3e-4,
+# pakowanie ~100%) regula pierwiastkowa dla Adama: LR = 3e-4 * sqrt(tokeny_SFT /
+# tokeny_pretreningu). Tokeny SFT na krok = 171,662,024 / 13,528 kubelkow = 12,689
+# prawdziwych tokenow na sekwencje (pakowanie 77,4%) x GBS; strata liczona na 99,75%
+# z nich. Warmup 20 krokow: momenty Adama startuja od zera (--no-load-optim), a w
+# run 5 drugi krok mial grad norm 4,55 przy 1,26 w pierwszym.
+# GBS 16: 203,0k tokenow/krok, 0,0968 pretreningu -> 3e-4 * sqrt(0,0968) = 9,33e-5.
+export LR=9.33e-5
+export WARMUP_ITERS=20
 # Co 100 krokow: 9 zapisow (~70 GB). Runy 6-8 ida po kolei na jednym dysku
 # (~210 GB razem), wiec dluzsze runy zapisuja rzadziej.
 export SAVE_INTERVAL=100
@@ -71,7 +76,7 @@ export TRAIN_ITERS=846
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run7_polskie_sprawy_v3_v13_16384_packed_gbs16_lr2e-4_846steps"
+export WANDB_NAME="poziomka_sft_run7_polskie_sprawy_v3_v13_16384_packed_gbs16_lr9.33e-5_wu20_846steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {

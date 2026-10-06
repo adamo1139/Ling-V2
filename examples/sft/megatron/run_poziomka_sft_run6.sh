@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run 6: powtorka run 5 (GBS 64, LR 3e-4, 212 krokow) na cache v13. Run 5 mial
+# Run 6: GBS 64, LR 1,87e-4 + 20 krokow warmupu, 212 krokow, na cache v13. Run 5 mial
 # think ON i OFF nieodroznialne (OFF jako '<think>\n</think>\n' w tresci), wiec
 # enable_thinking=True nie dzialalo; do tego zapis DCP wyzerowal q_layernorm.
 #
@@ -51,8 +51,15 @@ export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
 export ROTARY_BASE=640000
 export PACKING=1
 export GLOBAL_BATCH_SIZE=64
-export LR=3e-4
-export WARMUP_ITERS=0
+# LR skalibrowany do pretreningu (8192 x GBS 256 = 2,097,152 tokenow/krok, LR 3e-4,
+# pakowanie ~100%) regula pierwiastkowa dla Adama: LR = 3e-4 * sqrt(tokeny_SFT /
+# tokeny_pretreningu). Tokeny SFT na krok = 171,662,024 / 13,528 kubelkow = 12,689
+# prawdziwych tokenow na sekwencje (pakowanie 77,4%) x GBS; strata liczona na 99,75%
+# z nich. Warmup 20 krokow: momenty Adama startuja od zera (--no-load-optim), a w
+# run 5 drugi krok mial grad norm 4,55 przy 1,26 w pierwszym.
+# GBS 64: 812,1k tokenow/krok, 0,387 pretreningu -> 3e-4 * sqrt(0,387) = 1,87e-4.
+export LR=1.87e-4
+export WARMUP_ITERS=20
 # Co 25 krokow: 9 zapisow (~70 GB), pierwszy do sprawdzenia qk_norm po 25 krokach. Runy 6-8 ida po kolei na jednym dysku
 # (~210 GB razem), wiec dluzsze runy zapisuja rzadziej.
 export SAVE_INTERVAL=25
@@ -69,7 +76,7 @@ export TRAIN_ITERS=212
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run6_polskie_sprawy_v3_v13_16384_packed_gbs64_lr3e-4_212steps"
+export WANDB_NAME="poziomka_sft_run6_polskie_sprawy_v3_v13_16384_packed_gbs64_lr1.87e-4_wu20_212steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {
