@@ -67,6 +67,9 @@ export EVAL_INTERVAL=20
 # Walidacja to 136 spakowanych sekwencji; 2 x 64 = 128.
 export EVAL_ITERS=2
 export DATALOADER_WORKERS=2
+# Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
+# q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.
+export ASYNC_SAVE=0
 export ROUTER_BIAS_UPDATE_RATE=0
 
 # Jedna epoka: 13,528 kubelkow po spakowaniu / 64 na krok = 211,4 -> 212,

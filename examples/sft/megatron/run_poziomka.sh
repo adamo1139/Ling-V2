@@ -16,6 +16,12 @@ GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-128}"
 # conversations per sequence with thd attention; requires micro-batch 1.
 PACKING_ARGS=()
 [[ "${PACKING:-0}" == 1 ]] && PACKING_ARGS=(--sft-packing)
+# ASYNC_SAVE=0 saves synchronously. Async saves of run 5 and run 6 came back with 35 of
+# 128 q_layernorm entries zeroed in the first layer of some pipeline stages (which ones
+# varied per save), while the in-memory model trained fine - a save-path race, not data.
+# Default stays 1 so runs 1-5 replay exactly.
+SAVE_MODE_ARGS=(--async-save)
+[[ "${ASYNC_SAVE:-1}" == 0 ]] && SAVE_MODE_ARGS=()
 
 [[ -f "${MEGATRON_PATH}/pretrain_gpt.py" ]] || { echo "Missing patched Megatron checkout" >&2; exit 1; }
 [[ -f "${SFT_DATA}/manifest.json" ]] || { echo "Missing completed SFT manifest" >&2; exit 1; }
@@ -68,7 +74,7 @@ torchrun --standalone --nproc_per_node=8 "${SCRIPT_DIR}/train_poziomka_sft.py" \
     --no-create-attention-mask-in-dataloader --attention-backend flash \
     --attention-softmax-in-fp32 --no-masked-softmax-fusion \
     --load "${LOAD_CHECKPOINT}" --save "${SAVE_CHECKPOINT}" --ckpt-format torch_dist \
-    --no-save-optim --no-save-rng --async-save \
+    --no-save-optim --no-save-rng ${SAVE_MODE_ARGS[@]+"${SAVE_MODE_ARGS[@]}"} \
     --save-interval "${SAVE_INTERVAL:-100}" --eval-interval "${EVAL_INTERVAL:-100}" \
     --eval-iters "${EVAL_ITERS:-10}" --log-interval 1 --no-one-logger \
     ${PACKING_ARGS[@]+"${PACKING_ARGS[@]}"} "${LOAD_ARGS[@]}" "$@"
