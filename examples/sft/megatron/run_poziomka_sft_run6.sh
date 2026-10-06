@@ -60,9 +60,9 @@ export GLOBAL_BATCH_SIZE=64
 # GBS 64: 812,1k tokenow/krok, 0,387 pretreningu -> 3e-4 * sqrt(0,387) = 1,87e-4.
 export LR=1.87e-4
 export WARMUP_ITERS=20
-# Co 25 krokow: 9 zapisow (~70 GB), pierwszy do sprawdzenia qk_norm po 25 krokach. Runy 6-8 ida po kolei na jednym dysku
-# (~210 GB razem), wiec dluzsze runy zapisuja rzadziej.
-export SAVE_INTERVAL=25
+# Co 50 krokow: 5 zapisow (~40 GB).
+# Runy 6-9 ida po kolei na jednym dysku (~130 GB razem).
+export SAVE_INTERVAL=50
 export EVAL_INTERVAL=20
 # Walidacja to 136 spakowanych sekwencji; 2 x 64 = 128.
 export EVAL_ITERS=2

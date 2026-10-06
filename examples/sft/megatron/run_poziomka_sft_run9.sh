@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run 7: GBS 16, LR 9,33e-5 + 20 krokow warmupu, jedna epoka (846 krokow), cache v13. Drugi model do
-# merge'a wag z run 6 (GBS 64) i run 8 (GBS 32): ten sam start, te same dane i seed,
-# inna trajektoria (~200k prawdziwych tokenow na krok zamiast ~810k).
+# Run 9: GBS 768, LR 6,47e-4 bez warmupu, jedna epoka (18 krokow) na cache v13.
+# Czwarty model do merge'a z run 6-8: ta sama epoka w zaledwie 18 aktualizacjach.
 #
 # Dane: cache v13 (poziomka_v13_chat_template.jinja). OFF renderuje sie jako
 # '<think></think>\n', ON jako '<think>\n...'. Po <think> nastepny token to
@@ -12,9 +11,9 @@ set -euo pipefail
 # nieodroznialne i enable_thinking=True nie dzialalo. Eksport HF musi dostac
 # chat_template.jinja z tego cache, nie z v12.
 #
-# PP8 przy micro-batch 1 daje tylko 16 mikrobatchy na krok, wiec banka
-# pipeline'u to 7/23 ~ 30% (w run 5 ~10%): epoka ~30% dluzsza.
-# Launch with: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run7.sh
+# PP8 przy micro-batch 1 i 768 mikrobatchach na krok: banka pipeline'u pomijalna,
+# krok jak w run 4 (~480 s), 18 krokow ~2,5 h plus ewaluacje.
+# Launch with: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run9.sh
 # Edit run settings here; no caller environment variables are needed.
 #
 # Start z merge'a poziomka-instruct-2026-09-30-7 (wagi po run 3/4, RoPE 640000),
@@ -42,7 +41,7 @@ WORK_DIR="$(cd -- "${REPO_DIR}/.." && pwd)"
 export MEGATRON_PATH="${REPO_DIR}/Megatron-LM-core_v0.13.0"
 export SFT_DATA="${WORK_DIR}/poziomka-sft-cache-polskie-sprawy-v3-v13-16384"
 export LOAD_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka-instruct-2026-09-30-7-dcp"
-export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run7_polskie_sprawy_v3_v13_16384_gbs16"
+export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run9_polskie_sprawy_v3_v13_16384_gbs768"
 export RESUME=0
 
 export SEQ_LENGTH=16384
@@ -50,33 +49,31 @@ export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
 # Merge pochodzi z wag trenowanych na 640000 (run 3/4); 16384 wymaga >= 3,1e5.
 export ROTARY_BASE=640000
 export PACKING=1
-export GLOBAL_BATCH_SIZE=16
-# LR skalibrowany do pretreningu (8192 x GBS 256 = 2,097,152 tokenow/krok, LR 3e-4,
-# pakowanie ~100%) regula pierwiastkowa dla Adama: LR = 3e-4 * sqrt(tokeny_SFT /
-# tokeny_pretreningu). Tokeny SFT na krok = 171,662,024 / 13,528 kubelkow = 12,689
-# prawdziwych tokenow na sekwencje (pakowanie 77,4%) x GBS; strata liczona na 99,75%
-# z nich. Warmup 20 krokow: momenty Adama startuja od zera (--no-load-optim), a w
-# run 5 drugi krok mial grad norm 4,55 przy 1,26 w pierwszym.
-# GBS 16: 203,0k tokenow/krok, 0,0968 pretreningu -> 3e-4 * sqrt(0,0968) = 9,33e-5.
-export LR=9.33e-5
-export WARMUP_ITERS=20
-# Co 200 krokow: 5 zapisow (~40 GB).
+export GLOBAL_BATCH_SIZE=768
+# LR regula pierwiastkowa wzgledem pretreningu (8192 x GBS 256 = 2,097,152 tokenow/krok,
+# LR 3e-4): 768 x 12,689 = 9,745k prawdziwych tokenow/krok, 4,65x pretreningu ->
+# 3e-4 * sqrt(4,65) = 6,47e-4. To ekstrapolacja W GORE, ponad 2x LR pretreningu; run 4
+# przy podobnych ~9,9M tokenow/krok trenowal stabilnie na 3e-4. Bez warmupu: Megatron
+# wymaga warmupu krotszego niz TRAIN_ITERS, a przy 18 krokach kazdy krok sie liczy.
+export LR=6.47e-4
+export WARMUP_ITERS=0
+# Co 9 krokow: 2 zapisy (~16 GB).
 # Runy 6-9 ida po kolei na jednym dysku (~130 GB razem).
-export SAVE_INTERVAL=200
-export EVAL_INTERVAL=85
-# Walidacja to 136 spakowanych sekwencji; 8 x 16 = 128, tyle samo co w run 5.
-export EVAL_ITERS=8
+export SAVE_INTERVAL=9
+export EVAL_INTERVAL=6
+# Walidacja to 136 spakowanych sekwencji; 1 x 768 przechodzi ja ~5,6 razy w kolko.
+export EVAL_ITERS=1
 export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
 
-# Jedna epoka: 13,528 kubelkow po spakowaniu / 16 na krok = 845,5 -> 846,
+# Jedna epoka: 13,528 kubelkow po spakowaniu / 768 na krok = 17,6 -> 18,
 # policzone na cache v13 (OFF o jeden token krotsze niz w run 5, stad 13,528
-# zamiast 13,532). Ostatni batch zawija sie o 8 sekwencji.
-export TRAIN_ITERS=846
+# zamiast 13,532). Ostatni batch zawija sie o 296 sekwencji.
+export TRAIN_ITERS=18
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run7_polskie_sprawy_v3_v13_16384_packed_gbs16_lr9.33e-5_wu20_846steps"
+export WANDB_NAME="poziomka_sft_run9_polskie_sprawy_v3_v13_16384_packed_gbs768_lr6.47e-4_wu0_18steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {

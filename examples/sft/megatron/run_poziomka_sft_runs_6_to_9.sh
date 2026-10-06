@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Puszcza run 6, 7 i 8 po kolei (na noc). Dla kazdego runu:
+# Puszcza run 6, 7, 8 i 9 po kolei (na noc). Dla kazdego runu:
 #   trening -> 3 min ciszy -> sprawdzenie -> 3 min przerwy -> nastepny run.
-# Run in tmux on rigga: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_runs_6_7_8.sh
+# Run in tmux on rigga: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_runs_6_to_9.sh
 #
 # W trakcie treningu nic nie jest sprawdzane: dodatkowe obciazenie w czasie treningu
 # potrafi go rozwalic. Sprawdzenie po treningu:
@@ -19,10 +19,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 WORK_DIR="$(cd -- "${REPO_DIR}/.." && pwd)"
 
-RUNS=(6 7 8)
+RUNS=(6 7 8 9)
 QUIET_SECONDS="${QUIET_SECONDS:-180}"   # cisza po treningu, przed sprawdzeniem
 PAUSE_SECONDS="${PAUSE_SECONDS:-180}"   # przerwa po sprawdzeniu, przed nastepnym runem
-LOG_DIR="${WORK_DIR}/logs/poziomka_runs_6_7_8_$(date +%Y%m%d_%H%M%S)"
+LOG_DIR="${WORK_DIR}/logs/poziomka_runs_6_to_9_$(date +%Y%m%d_%H%M%S)"
 CHECKER="${REPO_DIR}/tools/check_dcp_qk_norm.py"
 export PYTHONPATH="${REPO_DIR}/Megatron-LM-core_v0.13.0${PYTHONPATH:+:${PYTHONPATH}}"
 
