@@ -1,0 +1,54 @@
+{# Poziomka v13: kazda odpowiedz asystenta ma blok think, a tryb rozroznia token po <think>.
+   ON:  <think>\n{rozumowanie}\n</think>\n{odpowiedz}
+   OFF: <think></think>\n{odpowiedz}
+   Po <think> nastepny token to \n (ON) albo < (OFF), wiec prefill <think>\n przy
+   enable_thinking=true wystepuje w danych wylacznie przed prawdziwym rozumowaniem.
+   W v12 OFF mialo postac <think>\n</think>\n i bylo nieodroznialne od ON az do
+   pierwszego tokenu rozumowania. Blok OFF wstawia szablon, nie dane; tresc zaczynajaca
+   sie juz od <think> (stare eksporty z prefiksem w content) zostaje bez zmian. #}
+{{- bos_token -}}
+{%- if tools is defined and tools is string -%}
+    {{- raise_exception('Przed renderowaniem zdekoduj tools z JSON.') -}}
+{%- endif -%}
+{%- if enable_thinking is defined and enable_thinking is not sameas true and enable_thinking is not sameas false -%}
+    {{- raise_exception('enable_thinking musi być wartością bool.') -}}
+{%- endif -%}
+{%- macro body(message, first) -%}
+    {%- if message['role'] == 'tool' -%}
+        {{- {'tool_call_id': message['tool_call_id'], 'name': message['name'], 'content': message['content']} | tojson -}}
+    {%- else -%}
+        {%- if message['role'] == 'assistant' -%}
+            {%- if message.get('reasoning_content') -%}
+                {{- '<think>\n' + message['reasoning_content'] + '\n</think>\n' -}}
+            {%- elif not (message['content'] or '').startswith('<think>') -%}
+                {{- '<think></think>\n' -}}
+            {%- endif -%}
+        {%- endif -%}
+        {{- message['content'] or '' -}}
+        {%- if first and tools is defined and tools -%}
+            {{- '\n\nDostępne narzędzia (JSON):\n' -}}{{- tools | tojson -}}
+        {%- endif -%}
+        {%- for call in message.get('tool_calls', []) -%}
+            {{- '\n<tool_call>' -}}
+            {{- {'id': call['id'], 'name': call['function']['name'], 'arguments': call['function']['arguments']} | tojson -}}
+            {{- '</tool_call>' -}}
+        {%- endfor -%}
+    {%- endif -%}
+{%- endmacro -%}
+{%- for message in messages -%}
+    {{- '<|im_start|>' + message['role'] + '\n' -}}
+    {%- if message['role'] in loss_roles | default(['assistant']) -%}
+        {%- generation -%}{{- body(message, loop.first) + '<|im_end|>' -}}{%- endgeneration -%}
+    {%- else -%}
+        {{- body(message, loop.first) + '<|im_end|>' -}}
+    {%- endif -%}
+    {{- '\n' -}}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+    {{- '<|im_start|>assistant\n' -}}
+    {%- if enable_thinking is sameas true -%}
+        {{- '<think>\n' -}}
+    {%- elif enable_thinking is sameas false -%}
+        {{- '<think></think>\n' -}}
+    {%- endif -%}
+{%- endif -%}

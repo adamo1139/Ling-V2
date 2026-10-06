@@ -7,6 +7,13 @@ set -euo pipefail
 # pierwiastkowego dla Adama byloby 3e-4 * sqrt(16/64) = 1,5e-4; 2e-4 to
 # swiadomie troche wiecej.
 #
+# Dane: cache v13 (poziomka_v13_chat_template.jinja). OFF renderuje sie jako
+# '<think></think>\n', ON jako '<think>\n...'. Po <think> nastepny token to
+# \n w 28,003 rekordach z rozumowaniem i < w 395,715 bez - sprawdzone na calym
+# cache. W run 5 (v12, '<think>\n</think>\n' w tresci) oba tryby byly
+# nieodroznialne i enable_thinking=True nie dzialalo. Eksport HF musi dostac
+# chat_template.jinja z tego cache, nie z v12.
+#
 # PP8 przy micro-batch 1 daje tylko 16 mikrobatchy na krok, wiec banka
 # pipeline'u to 7/23 ~ 30% (w run 5 ~10%): epoka ~30% dluzsza.
 # Launch with: bash Ling-V2/examples/sft/megatron/run_poziomka_sft_run6.sh
@@ -35,9 +42,9 @@ REPO_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 WORK_DIR="$(cd -- "${REPO_DIR}/.." && pwd)"
 
 export MEGATRON_PATH="${REPO_DIR}/Megatron-LM-core_v0.13.0"
-export SFT_DATA="${WORK_DIR}/poziomka-sft-cache-polskie-sprawy-v3-16384"
+export SFT_DATA="${WORK_DIR}/poziomka-sft-cache-polskie-sprawy-v3-v13-16384"
 export LOAD_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka-instruct-2026-09-30-7-dcp"
-export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run6_polskie_sprawy_v3_16384_gbs16"
+export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run6_polskie_sprawy_v3_v13_16384_gbs16"
 export RESUME=0
 
 export SEQ_LENGTH=16384
@@ -56,23 +63,19 @@ export EVAL_ITERS=8
 export DATALOADER_WORKERS=2
 export ROUTER_BIAS_UPDATE_RATE=0
 
-# Jedna epoka: 13,532 kubelkow po spakowaniu / 16 na krok = 845,75 -> 846,
-# ten sam plan pakowania co run 5 (zalezy od seeda, nie od batcha).
-# Ostatni batch zawija sie o 4 sekwencje.
+# Jedna epoka: 13,528 kubelkow po spakowaniu / 16 na krok = 845,5 -> 846,
+# policzone na cache v13 (OFF o jeden token krotsze niz w run 5, stad 13,528
+# zamiast 13,532). Ostatni batch zawija sie o 8 sekwencji.
 export TRAIN_ITERS=846
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run6_polskie_sprawy_v3_16384_packed_gbs16_lr2e-4_846steps"
+export WANDB_NAME="poziomka_sft_run6_polskie_sprawy_v3_v13_16384_packed_gbs16_lr2e-4_846steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {
-    echo "No cache at ${SFT_DATA}. Build it first:" >&2
-    echo "  python3 ${SCRIPT_DIR}/prepare_polskie_sprawy_v3.py \\" >&2
-    echo "    --input polskie-sprawy-v3/sft.jsonl --output polskie-sprawy-v3-sft" >&2
-    echo "  python3 ${SCRIPT_DIR}/prepare_poziomka_sft.py --input polskie-sprawy-v3-sft \\" >&2
-    echo "    --tokenizer poziomka-fun-rp-v12/tokenizer --chat-template poziomka-fun-rp-v12/chat_template.jinja \\" >&2
-    echo "    --output ${SFT_DATA} --seq-length 16384 --long-policy truncate --workers 16" >&2
+    echo "No cache at ${SFT_DATA}. Build it on this machine first:" >&2
+    echo "  bash ${SCRIPT_DIR}/build_polskie_sprawy_v3_cache.sh" >&2
     exit 1; }
 
 # The cache must match the training length and this run's record count.

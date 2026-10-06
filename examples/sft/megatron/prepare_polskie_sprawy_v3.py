@@ -4,17 +4,20 @@ that prepare_poziomka_sft.py reads.
 
 - Validation: 1% of conversations, chosen by their (sha256) id, so the split
   is deterministic and independent of line order.
-- Every assistant message without reasoning gets an empty
-  '<think>\n</think>\n' prefix. Unlike v11/v12 (10% hybrid), this is applied
-  to ALL thinking-off answers: the model learns that an answer always opens
-  with a think block, empty when it does not reason. This matches the
-  enable_thinking=False prefix of the v12 chat template.
+- --off-prefix legacy (default, run 5): every assistant message without
+  reasoning gets '<think>\n</think>\n' in its content. With the v12 template
+  this made ON and OFF identical up to the first reasoning token, so
+  enable_thinking=True (prefill '<think>\n') stopped working: the model closed
+  the block in 93% of the data and did so at inference too.
+- --off-prefix none (run 6+, with poziomka_v13_chat_template.jinja): content is
+  left untouched and the v13 template renders OFF as '<think></think>\n'. The
+  token after <think> is then \n only before real reasoning.
 - meta.thinking must agree with the presence of reasoning_content; any
   disagreement aborts instead of being guessed.
 
 Usage:
   python3 prepare_polskie_sprawy_v3.py --input polskie-sprawy-v3/sft.jsonl \
-      --output polskie-sprawy-v3-sft
+      --output polskie-sprawy-v3-sft-v13 --off-prefix none
 """
 
 import argparse
@@ -25,7 +28,7 @@ from pathlib import Path
 THINK_OFF_PREFIX = "<think>\n</think>\n"
 
 
-def convert(record):
+def convert(record, off_prefix=THINK_OFF_PREFIX):
     thinking = record["meta"]["thinking"]
     messages = []
     for message in record["messages"]:
@@ -40,7 +43,7 @@ def convert(record):
                                  f"reasoning_content present={has_reasoning}")
             if not has_reasoning:
                 message["reasoning_content"] = None
-                message["content"] = THINK_OFF_PREFIX + content
+                message["content"] = off_prefix + content
         messages.append(message)
     return {"id": record["id"], "messages": messages, "meta": record["meta"]}
 
@@ -52,7 +55,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--train-shards", type=int, default=16)
     parser.add_argument("--validation-percent", type=int, default=1)
+    parser.add_argument("--off-prefix", choices=("legacy", "none"), default="legacy",
+                        help="legacy: '<think>\\n</think>\\n' in content (run 5, v12 template); "
+                             "none: leave content as is (v13 template renders OFF)")
     args = parser.parse_args()
+    off_prefix = THINK_OFF_PREFIX if args.off_prefix == "legacy" else ""
 
     if args.output.exists():
         raise SystemExit(f"Refusing existing output: {args.output}")
@@ -66,7 +73,7 @@ def main():
     seen = set()
     with args.input.open(encoding="utf-8") as stream:
         for line in stream:
-            record = convert(json.loads(line))
+            record = convert(json.loads(line), off_prefix)
             if record["id"] in seen:
                 raise ValueError(f"Duplicate id {record['id']}")
             seen.add(record["id"])
