@@ -4,7 +4,9 @@
 1. Per-token loss on the first N validation records of the cache, with the exact
    training tokens and loss masks. A healthy SFT model sits near 1.0-1.5 on
    polskie-sprawy-v3; the broken run 5 export scored 4.46, run 4 iter 100 scored 1.41.
-2. Optional greedy samples through the model's own chat template.
+2. Optional greedy samples through the model's own chat template, for enable_thinking
+   omitted, False and True. For True it reports whether the model reasoned and closed
+   </think> (with the v13 template the True prefill <think>\n precedes only real reasoning).
 
   python3 Ling-V2/tools/sanity_sft_hf.py <hf-dir> \
       --cache poziomka-sft-cache-polskie-sprawy-v3-16384 [--generate]
@@ -57,16 +59,20 @@ def main():
         return
     end_id = tok.convert_tokens_to_ids("<|im_end|>")
     for prompt in PROMPTS:
-        for think in (None, False):
+        for think in (None, False, True):
             extra = {} if think is None else {"enable_thinking": think}
             text = tok.apply_chat_template([{"role": "user", "content": prompt}], tokenize=False,
                                            add_generation_prompt=True, **extra)
             ids = tok(text, return_tensors="pt", add_special_tokens=False).input_ids.cuda()
             with torch.no_grad():
-                out = model.generate(ids, max_new_tokens=200, do_sample=False,
+                out = model.generate(ids, max_new_tokens=200 if think is not True else 1200, do_sample=False,
                                      eos_token_id=end_id, pad_token_id=2)
+            text = tok.decode(out[0][ids.shape[1]:], skip_special_tokens=False)
             print(f"\n===== enable_thinking={think} | {prompt}")
-            print(tok.decode(out[0][ids.shape[1]:], skip_special_tokens=False))
+            if think is True:
+                reasoning, closed, _ = text.partition("</think>")
+                print(f"[reasoning chars: {len(reasoning.strip())}, </think> closed: {bool(closed)}]")
+            print(text)
 
 
 if __name__ == "__main__":
