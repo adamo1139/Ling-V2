@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run 10: parametry run 7 (GBS 16, LR 9,33e-5, warmup 20, start z merge'a -7, 16384,
-# pakowanie, zapis synchroniczny), dane polskie-sprawy-v4-nc (naprawione, 538,079 rozmow:
+# Run 10: parametry run 7 (GBS 16, warmup 20, start z merge'a -7, 16384,
+# pakowanie, zapis synchroniczny), LR 1,02e-4 z tej samej reguly co run 7, dane polskie-sprawy-v4-nc (naprawione, 538,079 rozmow:
 # v3 + 110k nowych, 21% z rozumowaniem zamiast 6,6%).
 #
 # Dane: cache v4-nc w formacie v13 (poziomka_v13_chat_template.jinja), budowany na
@@ -55,10 +55,10 @@ export GLOBAL_BATCH_SIZE=16
 # tokeny_pretreningu). Na v3 (run 7): 171,662,024 / 13,528 kubelkow = 12,689 prawdziwych
 # tokenow na sekwencje (pakowanie 77,4%) x GBS. Warmup 20 krokow: momenty Adama startuja od zera (--no-load-optim), a w
 # run 5 drugi krok mial grad norm 4,55 przy 1,26 w pierwszym.
-# LR 9,33e-5 jak w run 7 (decyzja: te same parametry). Na v4-nc pakowanie jest gestsze
-# (15,175 prawdziwych tokenow na sekwencje zamiast 12,689), wiec GBS 16 to 242,8k
-# tokenow/krok, 0,116 pretreningu; ta sama regula dalaby 3e-4 * sqrt(0,116) = 1,02e-4.
-export LR=9.33e-5
+# Na v4-nc pakowanie jest gestsze (15,175 prawdziwych tokenow na sekwencje zamiast
+# 12,689), wiec GBS 16 to 242,8k tokenow/krok, 0,116 pretreningu ->
+# 3e-4 * sqrt(0,116) = 1,02e-4 (run 7: 9,33e-5 przy 203k tokenow/krok).
+export LR=1.02e-4
 export WARMUP_ITERS=20
 # Co 200 krokow: 8 zapisow (~64 GB).
 export SAVE_INTERVAL=200
@@ -77,7 +77,7 @@ export TRAIN_ITERS=1525
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run10_polskie_sprawy_v4_nc_v13_16384_packed_gbs16_lr9.33e-5_wu20_1525steps"
+export WANDB_NAME="poziomka_sft_run10_polskie_sprawy_v4_nc_v13_16384_packed_gbs16_lr1.02e-4_wu20_1525steps"
 export WANDB_MODE="online"
 
 [[ -f "${SFT_DATA}/manifest.json" ]] || {
