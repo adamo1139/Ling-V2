@@ -25,10 +25,14 @@ WORK_DIR="${WORK_DIR:-$(cd -- "${REPO_DIR}/.." && pwd)}"
 VERSION="${1:-v3}"
 # Oczekiwane liczby (sprawdzone pelnym buildem): rekordy w sft.jsonl, ON i OFF w train,
 # kubelki po spakowaniu przy 16384.
+# Wersja bez znanych liczb (nowy zbior): 0 znaczy "raportuj, nie sprawdzaj".
+# Po pierwszym buildzie przepisz tu wypisane wartosci, zeby kolejne buildy byly
+# weryfikowane jak v3 i v4-nc.
 case "${VERSION}" in
     v3)    RECORDS=427970; TRAIN_ON=28003;  TRAIN_OFF=395715; BINS=13528 ;;
     v4-nc) RECORDS=538079; TRAIN_ON=107709; TRAIN_OFF=425024; BINS=24387 ;;
-    *) echo "Unknown version ${VERSION}; use v3 or v4-nc" >&2; exit 1 ;;
+    v6)    RECORDS=0;      TRAIN_ON=0;      TRAIN_OFF=0;      BINS=0 ;;
+    *) echo "Unknown version ${VERSION}; use v3, v4-nc or v6" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
 RAW_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}"
@@ -46,7 +50,11 @@ if [[ ! -f "${RAW_DIR}/sft.jsonl" ]]; then
     hf download "cpral/polskie-sprawy-${VERSION}" --repo-type dataset --include sft.jsonl --local-dir "${RAW_DIR}"
 fi
 records=$(wc -l < "${RAW_DIR}/sft.jsonl")
-[[ "${records}" == "${RECORDS}" ]] || { echo "Expected ${RECORDS} records in ${RAW_DIR}/sft.jsonl, found ${records}" >&2; exit 1; }
+if [[ "${RECORDS}" == "0" ]]; then
+    echo "Nowy zbior: ${records} rekordow w ${RAW_DIR}/sft.jsonl (bez weryfikacji)"
+else
+    [[ "${records}" == "${RECORDS}" ]] || { echo "Expected ${RECORDS} records in ${RAW_DIR}/sft.jsonl, found ${records}" >&2; exit 1; }
+fi
 
 python3 "${SCRIPT_DIR}/prepare_polskie_sprawy_v3.py" \
     --input "${RAW_DIR}/sft.jsonl" --output "${SPLIT_DIR}" --off-prefix none
@@ -76,15 +84,39 @@ for path in sorted(glob.glob(f"{cache}/train/*.tokens.bin")):
         nxt = int(s[hit[0] + 4]) if len(hit) else None
         after["ON (\\n)" if nxt == newline else "OFF (<)" if nxt == lt else f"other {nxt}"] += 1
 print("Token after the first <think>:", dict(after))
-if after != collections.Counter({"OFF (<)": expected_off, "ON (\\n)": expected_on}):
-    sys.exit(f"Expected exactly {expected_off:,} OFF and {expected_on:,} ON records")
+if expected_on or expected_off:
+    if after != collections.Counter({"OFF (<)": expected_off, "ON (\\n)": expected_on}):
+        sys.exit(f"Expected exactly {expected_off:,} OFF and {expected_on:,} ON records")
+else:
+    inne = {k: v for k, v in after.items() if not k.startswith(("ON", "OFF"))}
+    if inne:
+        sys.exit(f"Po <think> pojawiaja sie nieoczekiwane tokeny: {inne}")
+    print(f"Nowy zbior: ON={after['ON (\\n)']:,} OFF={after['OFF (<)']:,} (bez weryfikacji)")
 
 train = MMapSFTDataset(f"{cache}/manifest.json", "train", pack=True)
 bins = len(train.bins)
 print(f"Packed train sequences: {bins:,} (efficiency {train.packing_efficiency():.3f})")
 print(f"TRAIN_ITERS at GBS 16: {math.ceil(bins / 16)}, at GBS 32: {math.ceil(bins / 32)}, at GBS 64: {math.ceil(bins / 64)}")
-if bins != expected_bins:
-    sys.exit(f"Expected {expected_bins:,} packed sequences; launchers' TRAIN_ITERS assume it")
+if expected_bins:
+    if bins != expected_bins:
+        sys.exit(f"Expected {expected_bins:,} packed sequences; launchers' TRAIN_ITERS assume it")
+else:
+    # LR z reguly pierwiastkowej dla Adama, tej samej co w run 7 i run 10:
+    #   LR = 3e-4 * sqrt(tokeny_SFT_na_krok / 2,097,152)
+    # gdzie 2,097,152 = 8192 x GBS 256 z pretreningu, a tokeny_SFT_na_krok to
+    # prawdziwe (nie wypelnione) tokeny: tokeny_treningowe / kubelki x GBS.
+    import json
+    manifest = json.load(open(f"{cache}/manifest.json"))
+    tokeny = manifest["totals"]["train"]["tokens"]
+    na_sekwencje = tokeny / bins
+    print(f"\nPrawdziwych tokenow na spakowana sekwencje: {na_sekwencje:,.0f}")
+    print(f"{'GBS':>5} {'TRAIN_ITERS':>12} {'tokeny/krok':>13} {'LR':>10}")
+    for gbs in (16, 32, 64):
+        krok = na_sekwencje * gbs
+        lr = 3e-4 * math.sqrt(krok / 2_097_152)
+        print(f"{gbs:>5} {math.ceil(bins / gbs):>12} {krok:>13,.0f} {lr:>10.3g}")
+    print("\nPrzepisz RECORDS/TRAIN_ON/TRAIN_OFF/BINS do tego skryptu, zeby kolejne "
+          "buildy byly weryfikowane.")
 PY
 
 echo "Ready: ${CACHE_DIR}"
