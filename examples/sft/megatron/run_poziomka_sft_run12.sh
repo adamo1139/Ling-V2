@@ -7,13 +7,9 @@ set -euo pipefail
 # Parametry run 11 / run 10 (start z merge'a -7, 16384, pakowanie, GBS 16, zapis
 # synchroniczny, warmup 20), LR z tej samej reguly pierwiastkowej.
 #
-# UWAGA, TRZY WARTOSCI DO UZUPELNIENIA po zbudowaniu cache'u. Skrypt
+# Dane: cache v6-reasoning w formacie v13, budowany na riggu:
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v6-reasoning
-# wypisuje je na koncu:
-#   TRAIN_ITERS  - kubelki / GBS
-#   LR           - 3e-4 * sqrt(tokeny_na_krok / 2,097,152)
-#   EVAL_ITERS   - kubelki walidacyjne / GBS
-# Dopoki stoja na 0, launcher odmawia startu.
+# 107,709 rozmow train (wszystkie ON) i 1,061 walidacji, nic nie uciete przy 16384.
 #
 # Zbior nie ma ani jednej odpowiedzi bez rozumowania (<think></think>): model po tym
 # runie moze gorzej trzymac enable_thinking=false — porownywac z run 11 w trybie ON.
@@ -41,23 +37,27 @@ export PACKING=1
 export GLOBAL_BATCH_SIZE=16
 # LR z reguly pierwiastkowej dla Adama, tej samej co run 7, 10 i 11:
 #   LR = 3e-4 * sqrt(tokeny_SFT_na_krok / 2,097,152)
-# Wartosc dla GBS 16 wypisuje build_polskie_sprawy_v3_cache.sh v6-reasoning.
-export LR=0
+# v6-reasoning: 242,701,345 tokenow / 16,341 kubelkow = 14,852 prawdziwych tokenow na
+# sekwencje (pakowanie 90,6%), przy GBS 16 to 237,6k tokenow na krok, czyli 0,113
+# pretreningu -> 3e-4 * sqrt(0,113) = 1,01e-4 (run 11 na v6: 217,7k/krok, 9,67e-5).
+export LR=1.01e-4
 # Warmup 20: momenty Adama startuja od zera (--no-load-optim).
 export WARMUP_ITERS=20
-# Zapis i walidacja: przy malej liczbie krokow co ~1/4 i ~1/8 epoki; popraw po buildzie.
-export SAVE_INTERVAL=200
-export EVAL_INTERVAL=100
-# Calosc walidacji: kubelki walidacyjne / 16 (wypisuje build).
-export EVAL_ITERS=0
+# Co 256 krokow: zapisy na 256, 512, 768 plus koncowy na 1022 (~4 zapisy, ~48 GB rezerwy).
+export SAVE_INTERVAL=256
+# Walidacja co 128 krokow: 7 pomiarow w trakcie (128 ... 896) plus koncowy.
+export EVAL_INTERVAL=128
+# Walidacja v6-reasoning: 1,061 rozmow = 156 spakowanych sekwencji; 9 x 16 = 144 (prawie calosc).
+export EVAL_ITERS=9
 export DATALOADER_WORKERS=2
 # Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
 # q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.
 export ASYNC_SAVE=0
 export ROUTER_BIAS_UPDATE_RATE=0
 
-# Jedna epoka: kubelki po spakowaniu / 16 (wypisuje build).
-export TRAIN_ITERS=0
+# Jedna epoka: 16,341 kubelkow / 16 na krok = 1021,3 -> 1022 (run 11: 2756 przy podobnej
+# liczbie tokenow na krok, bo v6-reasoning ma ~40% tokenow v6).
+export TRAIN_ITERS=1022
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
@@ -81,11 +81,9 @@ import json, sys
 manifest = json.load(open(sys.argv[1]))
 if manifest["seq_length"] != int(sys.argv[2]):
     sys.exit(f"Cache is {manifest['seq_length']} tokens, training at {sys.argv[2]}")
-# Train = ~99% z 108,770 (podzial po id); dokladna liczba po buildzie. Sprawdzamy, ze to
-# zbior tylko z rozumowaniem (rzad wielkosci), a nie przypadkiem cache pelnego v6.
-records = manifest["totals"]["train"]["records"]
-if not 100_000 <= records <= 108_770:
-    sys.exit(f"Expected ~107.6k train records (v6-reasoning), found {records:,}; wrong cache?")
+if manifest["totals"]["train"]["records"] != 107709:
+    sys.exit(f"Expected 107,709 train records, found {manifest['totals']['train']['records']:,}; "
+             "recompute TRAIN_ITERS")
 print(f"Cache OK: {manifest['totals']['train']['records']:,} train records, "
       f"{manifest['totals']['train']['tokens']:,} tokens, "
       f"{manifest['totals']['train'].get('truncated_records', 0):,} truncated")
