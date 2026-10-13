@@ -73,9 +73,9 @@ export LR=9.67e-5
 # Warmup 20: momenty Adama startuja od zera (--no-load-optim), a w run 5 drugi
 # krok mial grad norm 4,55 przy 1,26 w pierwszym.
 export WARMUP_ITERS=20
-# Co 300 krokow: 11 zapisow (~88 GB). Przy 200 bylo by 15 zapisow i ~120 GB,
-# a launcher odmawia startu, jesli na dysku brakuje miejsca.
-export SAVE_INTERVAL=300
+# Co 700 krokow: checkpointy na 700, 1400 i 2100 plus zapis koncowy na 2756,
+# czyli 4 realne zapisy. Regula launchera rezerwuje ~40 GB.
+export SAVE_INTERVAL=700
 export EVAL_INTERVAL=150
 # Walidacja v6 to ~435 spakowanych sekwencji (5,916,511 tokenow / 13,605 na
 # sekwencje); 28 x 16 = 448, czyli calosc. Run 10 mial 14, bo walidacja v4-nc
