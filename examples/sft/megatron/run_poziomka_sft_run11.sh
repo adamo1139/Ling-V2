@@ -64,28 +64,37 @@ export GLOBAL_BATCH_SIZE=16
 #   LR = 3e-4 * sqrt(tokeny_SFT_na_krok / 2,097,152)
 # gdzie 2,097,152 = 8192 x GBS 256 z pretreningu. Dla v4-nc przy GBS 16 wyszlo
 # 1,02e-4 (242,8k tokenow/krok), dla v3 przy GBS 16 - 9,33e-5 (203k).
-# WARTOSC Z BUILDU CACHE'U:
-export LR=0
+# v6: 599,846,551 tokenow / 44,091 kubelkow = 13,605 prawdziwych tokenow na
+# sekwencje (pakowanie 82,9%), przy GBS 16 to 217,7k tokenow na krok, czyli
+# 0,104 pretreningu -> 3e-4 * sqrt(0,104) = 9,67e-5.
+# Dla porownania: v4-nc przy GBS 16 dalo 1,02e-4 (242,8k tokenow/krok,
+# pakowanie 92,5%), v3 - 9,33e-5 (203k).
+export LR=9.67e-5
 # Warmup 20: momenty Adama startuja od zera (--no-load-optim), a w run 5 drugi
 # krok mial grad norm 4,55 przy 1,26 w pierwszym.
 export WARMUP_ITERS=20
-# Co 200 krokow: 8 zapisow (~64 GB).
-export SAVE_INTERVAL=200
+# Co 300 krokow: 11 zapisow (~88 GB). Przy 200 bylo by 15 zapisow i ~120 GB,
+# a launcher odmawia startu, jesli na dysku brakuje miejsca.
+export SAVE_INTERVAL=300
 export EVAL_INTERVAL=150
-# Walidacja v4-nc to 235 spakowanych sekwencji; 14 x 16 = 224.
-export EVAL_ITERS=14
+# Walidacja v6 to ~435 spakowanych sekwencji (5,916,511 tokenow / 13,605 na
+# sekwencje); 28 x 16 = 448, czyli calosc. Run 10 mial 14, bo walidacja v4-nc
+# miala 235 sekwencji - przy v6 to pokrywaloby polowe zbioru.
+export EVAL_ITERS=28
 export DATALOADER_WORKERS=2
 # Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
 # q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.
 export ASYNC_SAVE=0
 export ROUTER_BIAS_UPDATE_RATE=0
 
-# Jedna epoka: kubelki po spakowaniu / GBS. WARTOSC Z BUILDU CACHE'U:
-export TRAIN_ITERS=0
+# Jedna epoka: 44,091 kubelkow po spakowaniu / 16 na krok = 2755,7 -> 2756.
+# To 1,8x krokow run 10 przy podobnej liczbie tokenow na krok, bo zbior jest
+# 2,5x wiekszy, ale pakowanie rzadsze (82,9% wobec 92,5%).
+export TRAIN_ITERS=2756
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run11_polskie_sprawy_v6_v13_16384_packed_gbs16"
+export WANDB_NAME="poziomka_sft_run11_polskie_sprawy_v6_v13_16384_packed_gbs16_lr9.67e-5_wu20_2756steps"
 export WANDB_MODE="online"
 
 if [[ "${LR}" == "0" || "${TRAIN_ITERS}" == "0" ]]; then
@@ -105,7 +114,9 @@ import json, sys
 manifest = json.load(open(sys.argv[1]))
 if manifest["seq_length"] != int(sys.argv[2]):
     sys.exit(f"Cache is {manifest['seq_length']} tokens, training at {sys.argv[2]}")
-# Liczby rekordow dla v6 nie znamy z gory - raportujemy, zeby bylo w logu runu.
+if manifest["totals"]["train"]["records"] != 1312556:
+    sys.exit(f"Expected 1,312,556 train records, found {manifest['totals']['train']['records']:,}; "
+             "recompute TRAIN_ITERS")
 print(f"Cache OK: {manifest['totals']['train']['records']:,} train records, "
       f"{manifest['totals']['train']['tokens']:,} tokens, "
       f"{manifest['totals']['train'].get('truncated_records', 0):,} truncated")
