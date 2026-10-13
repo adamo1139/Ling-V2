@@ -91,7 +91,8 @@ else:
     inne = {k: v for k, v in after.items() if not k.startswith(("ON", "OFF"))}
     if inne:
         sys.exit(f"Po <think> pojawiaja sie nieoczekiwane tokeny: {inne}")
-    print(f"Nowy zbior: ON={after['ON (\\n)']:,} OFF={after['OFF (<)']:,} (bez weryfikacji)")
+    on, off = after["ON (\\n)"], after["OFF (<)"]
+    print(f"Nowy zbior: ON={on:,} OFF={off:,} (bez weryfikacji)")
 
 train = MMapSFTDataset(f"{cache}/manifest.json", "train", pack=True)
 bins = len(train.bins)
