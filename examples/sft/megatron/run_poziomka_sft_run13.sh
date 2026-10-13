@@ -14,8 +14,8 @@ set -euo pipefail
 #   rozmowy (1,958 za dlugich) i walidacja sa te same.
 # - Loss na wszystkich tokenach poza BOS (prompt systemowy glimmer8, pytania, odpowiedzi),
 #   szablon v13, 555,423 rozmowy train (w tym wieloturowe x3).
-# - GBS 64, micro-batch 1, LR 3e-5 stale, warmup 20, 1 epoka = 86,378 kubelkow / 64 = 1350
-#   krokow — jak instruktor.
+# - GBS 64, micro-batch 1, warmup 20, 1 epoka = 86,378 kubelkow / 64 = 1350 krokow — jak
+#   instruktor. LR (1,2e-4) z reguly Poziomki, a nie instruktora (3e-5), bo to inny model.
 # Roznice wynikajace z modelu: architektura Poziomki (MoE, PP8 z poziomka_model_args.sh),
 # RoPE 640000 jak w merge'u, recompute/zapisy jak w run 10-12.
 #
@@ -41,9 +41,12 @@ export ROTARY_BASE=640000
 export PACKING=1
 # Jak instruktor: GBS 64 (64 mikrobatche na krok, banka pipeline'u 7/71 ~ 10%).
 export GLOBAL_BATCH_SIZE=64
-# Jak instruktor: LR 3e-5 stale (min-lr = lr w run_poziomka.sh), zamiast reguly
-# pierwiastkowej z run 7-12 (dla tego cache przy GBS 64 dalaby ~1,6e-4).
-export LR=3e-5
+# LR z reguly pierwiastkowej Poziomki (run 7-12), NIE z przepisu instruktora (3e-5 to
+# wartosc dla Bielika): LR = 3e-4 * sqrt(tokeny_SFT_na_krok / 2,097,152).
+# Cache: 453,487,080 tokenow / 86,378 kubelkow = 5,250 prawdziwych tokenow na sekwencje
+# (pakowanie 85,3%), przy GBS 64 to 336,0k tokenow na krok, czyli 0,160 pretreningu
+# -> 3e-4 * sqrt(0,160) = 1,20e-4. Stale (min-lr = lr w run_poziomka.sh).
+export LR=1.2e-4
 # Warmup 20: momenty Adama startuja od zera (--no-load-optim).
 export WARMUP_ITERS=20
 # Co 270 krokow: zapisy na 270, 540, 810, 1080 plus koncowy na 1350.
