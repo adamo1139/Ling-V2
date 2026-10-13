@@ -46,6 +46,9 @@ echo "== 1. q/k layernorm"
 PYTHONPATH="${MEGATRON}" python3 "${SCRIPT_DIR}/check_dcp_qk_norm.py" \
     "${@/#/${SRC}/iter_}" || { echo "Przerwane: checkpoint ma wyzerowane wagi normalizacji." >&2; exit 1; }
 
+# Konwerter uzywa os.mkdir, nie makedirs, wiec katalog nadrzedny musi juz byc.
+mkdir -p "${TARGET}"
+
 for ITER in "$@"; do
     echo "== 2. konwersja iter_${ITER}"
     python3 "${SCRIPT_DIR}/convert_dcp_to_safetensors_apt4_poziomka5.py" \
