@@ -76,7 +76,8 @@ export WARMUP_ITERS=20
 # Co 700 krokow: checkpointy na 700, 1400 i 2100 plus zapis koncowy na 2756,
 # czyli 4 realne zapisy. Regula launchera rezerwuje ~40 GB.
 export SAVE_INTERVAL=700
-export EVAL_INTERVAL=150
+# Walidacja co 350 krokow: 7 pomiarow w trakcie treningu (350, 700, ... 2450).
+export EVAL_INTERVAL=350
 # Walidacja v6 to ~435 spakowanych sekwencji (5,916,511 tokenow / 13,605 na
 # sekwencje); 28 x 16 = 448, czyli calosc. Run 10 mial 14, bo walidacja v4-nc
 # miala 235 sekwencji - przy v6 to pokrywaloby polowe zbioru.
