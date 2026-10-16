@@ -26,9 +26,17 @@ export MEGATRON_PATH="${REPO_DIR}/Megatron-LM-core_v0.13.0"
 # Cache na nvme (na / brakuje miejsca); build:
 #   WORK_DIR=/media/nvme_2tb/maked/poziomka_train bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8
 export SFT_DATA="/media/nvme_2tb/maked/poziomka_train/poziomka-sft-cache-polskie-sprawy-v8-v13-16384"
-export LOAD_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka-instruct-2026-09-30-7-dcp"
 export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run15_polskie_sprawy_v8_v13_16384_gbs16"
-export RESUME=0
+# Wznowienie: RESUME=1 bash run_poziomka_sft_run15.sh -- wczytuje ostatni checkpoint tego runu
+# (latest_checkpointed_iteration.txt) z licznikami iteracji i probek. Optymalizator nie jest
+# zapisywany (--no-save-optim), wiec momenty Adama startuja od zera przy pelnym LR; warmup
+# liczy sie od kroku 0, wiec po wznowieniu go nie ma.
+export RESUME="${RESUME:-0}"
+if [[ "${RESUME}" == 1 ]]; then
+    export LOAD_CHECKPOINT="${SAVE_CHECKPOINT}"
+else
+    export LOAD_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka-instruct-2026-09-30-7-dcp"
+fi
 
 export SEQ_LENGTH=16384
 export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
