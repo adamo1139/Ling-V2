@@ -6,6 +6,7 @@ set -euo pipefail
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh          # v3 (run 6-9)
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v4-nc    # v4-nc (run 10)
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v6-reasoning  # run 12
+#   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8    # run 15
 #
 # v4-nc to rewizja juz naprawiona fix_polskie_sprawy_v4.py (538,079 rekordow): bez 54
 # rekordow z tagiem think w rozumowaniu i 424 uszkodzonych odpowiedzi Mistrala.
@@ -35,7 +36,10 @@ case "${VERSION}" in
     v6)    RECORDS=1325738; TRAIN_ON=107709; TRAIN_OFF=1204847; BINS=44091 ;;
     # Same rozmowy z rozumowaniem z v6 (108,770; run 12): wszystkie ON, zadnego OFF.
     v6-reasoning) RECORDS=108770; TRAIN_ON=107709; TRAIN_OFF=0; BINS=16341 ;;
-    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6 or v6-reasoning" >&2; exit 1 ;;
+    # v8: te same rozmowy (i id) co v6, wiec ten sam podzial i te same ON/OFF; rozmowy OFF
+    # sa teraz glownie 3-5-turowe (instruktor), wiec kubelkow jeszcze nie znamy (0 = odkryj).
+    v8)    RECORDS=1325738; TRAIN_ON=107709; TRAIN_OFF=1204847; BINS=0 ;;
+    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning or v8" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
 RAW_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}"
