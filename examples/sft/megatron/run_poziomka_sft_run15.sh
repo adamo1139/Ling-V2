@@ -10,13 +10,8 @@ set -euo pipefail
 # 1,161,307 z trzema turami uzytkownika, 49,678 z piecioma (kolejne tury napisal instruktor
 # Bielik-PL-Minitron-7B po nauka-lotnictwa-2, W8A8). 1 217M tokenow APT4 tresci, ~2x v6.
 #
-# UWAGA, TRZY WARTOSCI DO UZUPELNIENIA po zbudowaniu cache'u. Skrypt
-#   WORK_DIR=/media/nvme_2tb/maked/poziomka_train bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8
-# wypisuje na koncu kubelki, tabele GBS -> TRAIN_ITERS / LR i liczbe sekwencji walidacji:
-#   TRAIN_ITERS - kubelki / 16 (jedna epoka)
-#   LR          - 3e-4 * sqrt(tokeny_na_krok / 2,097,152) dla GBS 16
-#   EVAL_ITERS  - sekwencje walidacji / 16 (cala walidacja)
-# Dopoki stoja na 0, launcher odmawia startu. Wpisz tez BINS do buildu (zamiast 0).
+# Cache v8 (build_polskie_sprawy_v3_cache.sh v8): 83,423 kubelkow, pakowanie 94,9%,
+# 15,569 prawdziwych tokenow na sekwencje, 830 sekwencji walidacji.
 #
 # Start z merge'a poziomka-instruct-2026-09-30-7 (wagi po run 3/4, RoPE 640000), jak
 # run 10-13: /media/nvme_2tb/maked/poziomka_train/poziomka-instruct-2026-09-30-7-dcp
@@ -42,16 +37,18 @@ export ROTARY_BASE=640000
 export PACKING=1
 # GBS 16 jak run 10/11 (najlepsze zmierzone wyniki Poziomki).
 export GLOBAL_BATCH_SIZE=16
-# Z buildu v8 (tabela LR przy GBS 16).
-export LR=0
+# Regula pierwiastkowa jak run 7-13: GBS 16 x 15,569 = 249,1k tokenow na krok = 0,119
+# pretreningu -> 3e-4 * sqrt(0,119) = 1,03e-4.
+export LR=1.03e-4
 export WARMUP_ITERS=20
-# Z buildu v8: kubelki / 16.
-export TRAIN_ITERS=0
-# Z buildu v8: sekwencje walidacji / 16.
-export EVAL_ITERS=0
-# Zapisy i walidacja: ~co 1/8 epoki i ~1/16 epoki; przelicz po wpisaniu TRAIN_ITERS.
-export SAVE_INTERVAL=$(( TRAIN_ITERS > 0 ? (TRAIN_ITERS + 7) / 8 : 1 ))
-export EVAL_INTERVAL=$(( TRAIN_ITERS > 0 ? (TRAIN_ITERS + 15) / 16 : 1 ))
+# Jedna epoka: 83,423 / 16 = 5213,9 -> 5214 (~1,9x run 11).
+export TRAIN_ITERS=5214
+# Cala walidacja: 830 sekwencji, 52 x 16 = 832 (51 x 16 = 816 by jej nie pokrylo).
+export EVAL_ITERS=52
+# Zapisy co 652 kroki (~1/8 epoki): 652, 1304, ... 4564 plus koncowy 5214, ~72 GB.
+export SAVE_INTERVAL=652
+# Walidacja co 326 krokow (~1/16 epoki).
+export EVAL_INTERVAL=326
 export DATALOADER_WORKERS=2
 # Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
 # q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.

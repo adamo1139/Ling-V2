@@ -37,8 +37,8 @@ case "${VERSION}" in
     # Same rozmowy z rozumowaniem z v6 (108,770; run 12): wszystkie ON, zadnego OFF.
     v6-reasoning) RECORDS=108770; TRAIN_ON=107709; TRAIN_OFF=0; BINS=16341 ;;
     # v8: te same rozmowy (i id) co v6, wiec ten sam podzial i te same ON/OFF; rozmowy OFF
-    # sa teraz glownie 3-5-turowe (instruktor), wiec kubelkow jeszcze nie znamy (0 = odkryj).
-    v8)    RECORDS=1325738; TRAIN_ON=107709; TRAIN_OFF=1204847; BINS=0 ;;
+    # sa teraz glownie 3-5-turowe (instruktor). Run 15.
+    v8)    RECORDS=1325738; TRAIN_ON=107709; TRAIN_OFF=1204847; BINS=83423 ;;
     *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning or v8" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
