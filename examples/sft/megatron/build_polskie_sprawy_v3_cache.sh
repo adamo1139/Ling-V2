@@ -7,6 +7,7 @@ set -euo pipefail
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v4-nc    # v4-nc (run 10)
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v6-reasoning  # run 12
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8    # run 15
+#   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8-nothink  # KD od Bielika
 #
 # v4-nc to rewizja juz naprawiona fix_polskie_sprawy_v4.py (538,079 rekordow): bez 54
 # rekordow z tagiem think w rozumowaniu i 424 uszkodzonych odpowiedzi Mistrala.
@@ -39,7 +40,10 @@ case "${VERSION}" in
     # v8: te same rozmowy (i id) co v6, wiec ten sam podzial i te same ON/OFF; rozmowy OFF
     # sa teraz glownie 3-5-turowe (instruktor). Run 15.
     v8)    RECORDS=1325738; TRAIN_ON=107709; TRAIN_OFF=1204847; BINS=83423 ;;
-    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning or v8" >&2; exit 1 ;;
+    # v8 bez rozmow z rozumowaniem (meta.thinking == off), do KD od nauczyciela bez rozumowania
+    # (Bielik-PL-Minitron-7B-v3.0-Instruct). Filtrowany lokalnie z sft.jsonl v8, nie z HF.
+    v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=0 ;;
+    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8 or v8-nothink" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
 RAW_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}"
@@ -53,7 +57,25 @@ for d in "${SPLIT_DIR}" "${CACHE_DIR}"; do
     [[ ! -e "${d}" ]] || { echo "Refusing existing output: ${d}" >&2; exit 1; }
 done
 
-if [[ ! -f "${RAW_DIR}/sft.jsonl" ]]; then
+if [[ "${VERSION}" == v8-nothink && ! -f "${RAW_DIR}/sft.jsonl" ]]; then
+    V8_RAW="${WORK_DIR}/polskie-sprawy-v8/sft.jsonl"
+    [[ -f "${V8_RAW}" ]] || hf download cpral/polskie-sprawy-v8 --repo-type dataset --include sft.jsonl \
+        --local-dir "${WORK_DIR}/polskie-sprawy-v8"
+    mkdir -p "${RAW_DIR}"
+    python3 -c '
+import json, os, sys
+src, dst = sys.argv[1], sys.argv[2]
+kept = dropped = 0
+with open(src, encoding="utf-8") as fin, open(dst + ".partial", "x", encoding="utf-8") as fout:
+    for line in fin:
+        if json.loads(line)["meta"]["thinking"] == "off":
+            fout.write(line); kept += 1
+        else:
+            dropped += 1
+os.rename(dst + ".partial", dst)
+print(f"v8-nothink: {kept:,} rozmow bez rozumowania, pominieto {dropped:,} z rozumowaniem")
+' "${V8_RAW}" "${RAW_DIR}/sft.jsonl"
+elif [[ ! -f "${RAW_DIR}/sft.jsonl" ]]; then
     hf download "cpral/polskie-sprawy-${VERSION}" --repo-type dataset --include sft.jsonl --local-dir "${RAW_DIR}"
 fi
 records=$(wc -l < "${RAW_DIR}/sft.jsonl")
