@@ -44,7 +44,7 @@ case "${VERSION}" in
     # (Bielik-PL-Minitron-7B-v3.0-Instruct). Filtrowany lokalnie z sft.jsonl v8, nie z HF.
     # Loss tylko na odpowiedziach asystenta (+ ich <|im_end|>): nauczyciel jest trenowany tylko na
     # turach asystenta, wiec jego rozklad na turach uzytkownika nie jest sygnalem do KD.
-    v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=0; LOSS_ROLES=assistant ;;
+    v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=67138; LOSS_ROLES=assistant ;;
     *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8 or v8-nothink" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
