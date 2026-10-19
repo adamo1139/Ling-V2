@@ -42,10 +42,14 @@ case "${VERSION}" in
     v8)    RECORDS=1325738; TRAIN_ON=107709; TRAIN_OFF=1204847; BINS=83423 ;;
     # v8 bez rozmow z rozumowaniem (meta.thinking == off), do KD od nauczyciela bez rozumowania
     # (Bielik-PL-Minitron-7B-v3.0-Instruct). Filtrowany lokalnie z sft.jsonl v8, nie z HF.
-    v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=0 ;;
+    # Loss tylko na odpowiedziach asystenta (+ ich <|im_end|>): nauczyciel jest trenowany tylko na
+    # turach asystenta, wiec jego rozklad na turach uzytkownika nie jest sygnalem do KD.
+    v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=0; LOSS_ROLES=assistant ;;
     *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8 or v8-nothink" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
+# Domyslnie loss na wszystkich tokenach (jak v3-v8); wersja moze to zawezic.
+LOSS_ROLES="${LOSS_ROLES:-all}"
 RAW_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}"
 SPLIT_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}-sft-v13"
 CACHE_DIR="${WORK_DIR}/poziomka-sft-cache-polskie-sprawy-${VERSION}-v13-${SEQ_LENGTH}"
@@ -90,7 +94,8 @@ python3 "${SCRIPT_DIR}/prepare_polskie_sprawy_v3.py" \
 
 python3 "${SCRIPT_DIR}/prepare_poziomka_sft.py" \
     --input "${SPLIT_DIR}" --tokenizer "${TOKENIZER}" --chat-template "${TEMPLATE}" \
-    --output "${CACHE_DIR}" --seq-length "${SEQ_LENGTH}" --long-policy truncate --workers "${WORKERS}"
+    --output "${CACHE_DIR}" --seq-length "${SEQ_LENGTH}" --long-policy truncate --workers "${WORKERS}" \
+    --loss-roles ${LOSS_ROLES}
 
 PYTHONPATH="${SCRIPT_DIR}" python3 - "${CACHE_DIR}" "${TRAIN_ON}" "${TRAIN_OFF}" "${BINS}" <<'PY'
 import collections, glob, math, sys
