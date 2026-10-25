@@ -21,6 +21,7 @@ docs/model-board.md, "External model measured here"). Without `board_pl/byte_ppl
 --dry-run checks everything and prints what would be sent without contacting the track API.
 """
 import argparse
+import hashlib
 import json
 import os
 
@@ -75,6 +76,16 @@ def hub_weights(repo, revision):
     return weights, total
 
 
+def checkpoint_sha256(weights):
+    """The file's sha256, or for sharded weights the sha256 of their `sha256sum` manifest
+    (lines `<sha256>  <file>`, sorted by file name), so `sha256sum *.safetensors | sha256sum`
+    reproduces it."""
+    if len(weights) == 1:
+        return next(iter(weights.values()))
+    manifest = "".join(f"{weights[name]}  {name}\n" for name in sorted(weights))
+    return hashlib.sha256(manifest.encode()).hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -100,8 +111,8 @@ def main():
         raise SystemExit(f"MultiBLiMP weights {measured} are not {args.hf_repo}@{args.revision}: {hub}")
     if multiblimp.get("model_revision") not in (None, args.revision):
         raise SystemExit(f"MultiBLiMP was measured at revision {multiblimp['model_revision']}")
-    if len(hub) != 1:
-        raise SystemExit(f"Expected one weights file, got {sorted(hub)}; pick the checkpoint sha by hand")
+    if len(hub) > 1:
+        print(f"note: {len(hub)} weights files; checkpoint_sha256 is the sha256 of their sha256sum manifest")
     metrics = {"board_pl/multiblimp": multiblimp["accuracy_percent"]}
     n_params = args.n_params
     dtype = multiblimp.get("dtype", "").replace("torch.", "")
@@ -134,7 +145,7 @@ def main():
         raise SystemExit("No parameter count; pass --n-params")
     leaderboard = {
         "step": 0,
-        "checkpoint_sha256": next(iter(hub.values())),
+        "checkpoint_sha256": checkpoint_sha256(measured),
         "n_params": n_params,
         "kind": "external",
         "trust": args.trust,
