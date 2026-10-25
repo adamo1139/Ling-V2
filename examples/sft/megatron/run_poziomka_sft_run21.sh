@@ -10,7 +10,8 @@ set -euo pipefail
 # jakosc to ocena 1-100 z modeli AutoGluon wytrenowanych na 500 recznych ocenach na zbior
 # (polskie-dane-instruktazowe/filtr). Cache: build_polskie_sprawy_v3_cache.sh jakosc50.
 #
-# LR, TRAIN_ITERS i EVAL_ITERS (0 ponizej) wypisuje pierwszy build cache; przepisz je tu.
+# Cache (build jakosc50): 1,248,057 rozmow train (39,499 ON, 1,208,558 OFF), 65,492 kubelki,
+# pakowanie 95,6%, 15,677 prawdziwych tokenow na sekwencje, 131 sekwencji walidacji.
 # Eksport HF musi dostac chat_template.jinja z cache (tools/dcp_do_hf.sh robi to sam).
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,16 +42,16 @@ export ROTARY_BASE=640000
 export PACKING=1
 # GBS 16 jak run 10/11/15.
 export GLOBAL_BATCH_SIZE=16
-# Regula pierwiastkowa jak run 7-15 (tabela z buildu cache, wiersz GBS 16).
-export LR=0
+# Regula pierwiastkowa jak run 7-15: GBS 16 x 15,677 = 250,8k tokenow na krok = 0,120
+# pretreningu -> 3e-4 * sqrt(0,120) = 1,04e-4.
+export LR=1.04e-4
 export WARMUP_ITERS=20
-# Jedna epoka: kubelki / 16, w gore (build wypisuje).
-export TRAIN_ITERS=0
-# Cala walidacja: sekwencje walidacji / 16, w gore (build wypisuje sekwencje walidacji).
-export EVAL_ITERS=0
-# Oczekiwana liczba rekordow train w cache (build wypisuje ja w manifest.json).
-export EXPECTED_TRAIN_RECORDS=0
-# Zapisy co ~1/8 epoki i walidacja co ~1/16 epoki, jak w run 15.
+# Jedna epoka: 65,492 / 16 = 4093,25 -> 4094.
+export TRAIN_ITERS=4094
+# Cala walidacja: 131 sekwencji, 9 x 16 = 144 (8 x 16 = 128 by jej nie pokrylo).
+export EVAL_ITERS=9
+export EXPECTED_TRAIN_RECORDS=1248057
+# Zapisy co ~1/8 epoki (512) i walidacja co ~1/16 epoki (256), jak w run 15.
 export SAVE_INTERVAL=$(( (TRAIN_ITERS + 7) / 8 ))
 export EVAL_INTERVAL=$(( (TRAIN_ITERS + 15) / 16 ))
 export DATALOADER_WORKERS=2

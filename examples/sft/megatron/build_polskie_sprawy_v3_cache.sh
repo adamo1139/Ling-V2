@@ -48,9 +48,8 @@ case "${VERSION}" in
     v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=67138; LOSS_ROLES=assistant ;;
     # v8 z jakosc >= 50 (539,252) + fun-rp-v12-nothink z jakosc >= 50 bez 10,815 rozmow z samymi
     # definicjami tools (711,312), polaczone przez polacz_jakosc50.py (fun-rp: id =
-    # sha256(record_id), thinking off). Run 21. ON/OFF/BINS nieznane do pierwszego buildu.
-    # Walidacja 0,2% (~2,5k rozmow) zamiast 1%.
-    jakosc50) RECORDS=1250564; TRAIN_ON=0; TRAIN_OFF=0; BINS=0; SPLIT_ARGS="--validation-permille 2" ;;
+    # sha256(record_id), thinking off). Run 21. Walidacja 0,2% (2,507 rozmow) zamiast 1%.
+    jakosc50) RECORDS=1250564; TRAIN_ON=39499; TRAIN_OFF=1208558; BINS=65492; SPLIT_ARGS="--validation-permille 2" ;;
     *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8, v8-nothink or jakosc50" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
