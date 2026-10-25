@@ -84,7 +84,8 @@ def main():
     parser.add_argument("--author", required=True)
     parser.add_argument("--hf-repo", required=True)
     parser.add_argument("--revision", required=True, help="full HF commit of the evaluated weights")
-    parser.add_argument("--n-params", type=int, help="default: the Hub's safetensors parameter count")
+    parser.add_argument("--n-params", type=int,
+                        help="default: the parameter count from the arc_easy_pl.py result, else the Hub's")
     parser.add_argument("--harness-sha", help="commit of the evaluation harness, if one applies")
     parser.add_argument("--trust", choices=("reported", "measured"), default="reported")
     parser.add_argument("--project", default="model-board-pl")
@@ -92,9 +93,6 @@ def main():
     args = parser.parse_args()
 
     hub, hub_params = hub_weights(args.hf_repo, args.revision)
-    n_params = args.n_params or hub_params
-    if not n_params:
-        raise SystemExit("The Hub reports no parameter count; pass --n-params")
 
     multiblimp = load_multiblimp(args.multiblimp)
     measured = {os.path.basename(f): digest for f, digest in multiblimp["weights_sha256"].items()}
@@ -105,6 +103,7 @@ def main():
     if len(hub) != 1:
         raise SystemExit(f"Expected one weights file, got {sorted(hub)}; pick the checkpoint sha by hand")
     metrics = {"board_pl/multiblimp": multiblimp["accuracy_percent"]}
+    n_params = args.n_params
     dtype = multiblimp.get("dtype", "").replace("torch.", "")
     harness = f"MultiBLiMP Ling-V2 {dtype}"
 
@@ -112,16 +111,27 @@ def main():
         accuracy, revision, params, weights, arc_harness = load_arc(args.arc_easy)
         if revision not in (None, args.revision):
             raise SystemExit(f"ARC-Easy-PL was measured at revision {revision}, not {args.revision}")
-        if params is not None and params != n_params:
-            raise SystemExit(f"ARC-Easy-PL model has {params} parameters, the Hub reports {n_params}")
+        if params is not None and hub_params:
+            # The Hub counts every stored tensor, including persistent buffers that are not
+            # parameters (e.g. the MoE router's expert_bias), so it may exceed the model's count.
+            extra = hub_params - params
+            if not 0 <= extra <= hub_params * 1e-4:
+                raise SystemExit(f"ARC-Easy-PL model has {params} parameters, the Hub reports {hub_params}")
+            if extra:
+                print(f"note: the Hub stores {extra} more values than the model's parameters "
+                      "(buffers); n_params uses the model's count")
+        n_params = n_params or params
         if weights is not None and weights != multiblimp["weights_sha256"]:
             raise SystemExit("ARC-Easy-PL and MultiBLiMP were measured on different weights")
         if revision is None and weights is None:
-            print("note: the ARC-Easy-PL result came from a local directory and has no weights hash; "
+            print("note: the ARC-Easy-PL result records neither a model revision nor a weights hash; "
                   "only its parameter count was checked")
         metrics["board_pl/arc_easy"] = accuracy
         harness += f"; ARC-PL {arc_harness}"
 
+    n_params = n_params or hub_params
+    if not n_params:
+        raise SystemExit("No parameter count; pass --n-params")
     leaderboard = {
         "step": 0,
         "checkpoint_sha256": next(iter(hub.values())),
