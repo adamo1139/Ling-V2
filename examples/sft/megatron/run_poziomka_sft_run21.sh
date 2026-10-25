@@ -101,5 +101,6 @@ if (( free_gb < needed_gb )); then
     exit 1
 fi
 
-exec bash "${SCRIPT_DIR}/run_poziomka.sh" \
+# --log-throughput: TFLOP/s na GPU w logu i W&B (jak w runach KD 17-20).
+exec bash "${SCRIPT_DIR}/run_poziomka.sh" --log-throughput \
     --wandb-project "${WANDB_PROJECT}" --wandb-exp-name "${WANDB_NAME}" "$@"
