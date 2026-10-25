@@ -8,6 +8,7 @@ set -euo pipefail
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v6-reasoning  # run 12
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8    # run 15
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8-nothink  # KD od Bielika
+#   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh jakosc50    # run 21
 #
 # v4-nc to rewizja juz naprawiona fix_polskie_sprawy_v4.py (538,079 rekordow): bez 54
 # rekordow z tagiem think w rozumowaniu i 424 uszkodzonych odpowiedzi Mistrala.
@@ -45,7 +46,11 @@ case "${VERSION}" in
     # Loss tylko na odpowiedziach asystenta (+ ich <|im_end|>): nauczyciel jest trenowany tylko na
     # turach asystenta, wiec jego rozklad na turach uzytkownika nie jest sygnalem do KD.
     v8-nothink) RECORDS=1216968; TRAIN_ON=0; TRAIN_OFF=1204847; BINS=67138; LOSS_ROLES=assistant ;;
-    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8 or v8-nothink" >&2; exit 1 ;;
+    # v8 z jakosc >= 50 (539,252) + fun-rp-v12-nothink z jakosc >= 50 bez 10,815 rozmow z samymi
+    # definicjami tools (711,312), polaczone przez polacz_jakosc50.py (fun-rp: id =
+    # sha256(record_id), thinking off). Run 21. ON/OFF/BINS nieznane do pierwszego buildu.
+    jakosc50) RECORDS=1250564; TRAIN_ON=0; TRAIN_OFF=0; BINS=0 ;;
+    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8, v8-nothink or jakosc50" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
 # Domyslnie loss na wszystkich tokenach (jak v3-v8); wersja moze to zawezic.
@@ -79,6 +84,14 @@ with open(src, encoding="utf-8") as fin, open(dst + ".partial", "x", encoding="u
 os.rename(dst + ".partial", dst)
 print(f"v8-nothink: {kept:,} rozmow bez rozumowania, pominieto {dropped:,} z rozumowaniem")
 ' "${V8_RAW}" "${RAW_DIR}/sft.jsonl"
+elif [[ "${VERSION}" == jakosc50 && ! -f "${RAW_DIR}/sft.jsonl" ]]; then
+    for repo in polskie-sprawy-v8-jakosc50 poziomka-fun-rp-v12-nothink-jakosc50; do
+        [[ -f "${WORK_DIR}/${repo}/sft.jsonl" ]] || hf download "cpral/${repo}" --repo-type dataset \
+            --include sft.jsonl --local-dir "${WORK_DIR}/${repo}"
+    done
+    mkdir -p "${RAW_DIR}"
+    python3 "${SCRIPT_DIR}/polacz_jakosc50.py" --v8 "${WORK_DIR}/polskie-sprawy-v8-jakosc50/sft.jsonl" \
+        --fun-rp "${WORK_DIR}/poziomka-fun-rp-v12-nothink-jakosc50/sft.jsonl" --output "${RAW_DIR}/sft.jsonl"
 elif [[ ! -f "${RAW_DIR}/sft.jsonl" ]]; then
     hf download "cpral/polskie-sprawy-${VERSION}" --repo-type dataset --include sft.jsonl --local-dir "${RAW_DIR}"
 fi

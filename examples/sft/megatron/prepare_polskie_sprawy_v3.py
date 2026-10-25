@@ -45,7 +45,10 @@ def convert(record, off_prefix=THINK_OFF_PREFIX):
                 message["reasoning_content"] = None
                 message["content"] = off_prefix + content
         messages.append(message)
-    return {"id": record["id"], "messages": messages, "meta": record["meta"]}
+    out = {"id": record["id"], "messages": messages, "meta": record["meta"]}
+    if record.get("tools"):  # fun-rp: definicje narzędzi trafiają do szablonu (pierwsza wiadomość)
+        out["tools"] = record["tools"]
+    return out
 
 
 def main():
