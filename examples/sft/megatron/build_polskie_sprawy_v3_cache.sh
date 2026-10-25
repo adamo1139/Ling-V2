@@ -49,12 +49,15 @@ case "${VERSION}" in
     # v8 z jakosc >= 50 (539,252) + fun-rp-v12-nothink z jakosc >= 50 bez 10,815 rozmow z samymi
     # definicjami tools (711,312), polaczone przez polacz_jakosc50.py (fun-rp: id =
     # sha256(record_id), thinking off). Run 21. ON/OFF/BINS nieznane do pierwszego buildu.
-    jakosc50) RECORDS=1250564; TRAIN_ON=0; TRAIN_OFF=0; BINS=0 ;;
+    # Walidacja 0,2% (~2,5k rozmow) zamiast 1%.
+    jakosc50) RECORDS=1250564; TRAIN_ON=0; TRAIN_OFF=0; BINS=0; SPLIT_ARGS="--validation-permille 2" ;;
     *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8, v8-nothink or jakosc50" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
 # Domyslnie loss na wszystkich tokenach (jak v3-v8); wersja moze to zawezic.
 LOSS_ROLES="${LOSS_ROLES:-all}"
+# Domyslnie walidacja 1% (jak v3-v8); wersja moze to zmienic.
+SPLIT_ARGS="${SPLIT_ARGS:-}"
 RAW_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}"
 SPLIT_DIR="${WORK_DIR}/polskie-sprawy-${VERSION}-sft-v13"
 CACHE_DIR="${WORK_DIR}/poziomka-sft-cache-polskie-sprawy-${VERSION}-v13-${SEQ_LENGTH}"
@@ -103,7 +106,7 @@ else
 fi
 
 python3 "${SCRIPT_DIR}/prepare_polskie_sprawy_v3.py" \
-    --input "${RAW_DIR}/sft.jsonl" --output "${SPLIT_DIR}" --off-prefix none
+    --input "${RAW_DIR}/sft.jsonl" --output "${SPLIT_DIR}" --off-prefix none ${SPLIT_ARGS}
 
 python3 "${SCRIPT_DIR}/prepare_poziomka_sft.py" \
     --input "${SPLIT_DIR}" --tokenizer "${TOKENIZER}" --chat-template "${TEMPLATE}" \

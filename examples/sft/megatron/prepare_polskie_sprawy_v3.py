@@ -2,8 +2,8 @@
 """Turn polskie-sprawy-v3/sft.jsonl into the train/ + validation/ layout
 that prepare_poziomka_sft.py reads.
 
-- Validation: 1% of conversations, chosen by their (sha256) id, so the split
-  is deterministic and independent of line order.
+- Validation: 1% of conversations (or --validation-permille), chosen by their
+  (sha256) id, so the split is deterministic and independent of line order.
 - --off-prefix legacy (default, run 5): every assistant message without
   reasoning gets '<think>\n</think>\n' in its content. With the v12 template
   this made ON and OFF identical up to the first reasoning token, so
@@ -58,6 +58,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--train-shards", type=int, default=16)
     parser.add_argument("--validation-percent", type=int, default=1)
+    parser.add_argument("--validation-permille", type=int, default=None,
+                        help="walidacja w promilach (np. 2 = 0,2%%); zastepuje --validation-percent. "
+                             "Osobna opcja, zeby stare podzialy (procenty) zostaly bez zmian")
     parser.add_argument("--off-prefix", choices=("legacy", "none"), default="legacy",
                         help="legacy: '<think>\\n</think>\\n' in content (run 5, v12 template); "
                              "none: leave content as is (v13 template renders OFF)")
@@ -82,7 +85,10 @@ def main():
             seen.add(record["id"])
             bucket = int(record["id"][:8], 16)
             text = json.dumps(record, ensure_ascii=False) + "\n"
-            split = "validation" if bucket % 100 < args.validation_percent else "train"
+            if args.validation_permille is not None:
+                split = "validation" if bucket % 1000 < args.validation_permille else "train"
+            else:
+                split = "validation" if bucket % 100 < args.validation_percent else "train"
             if split == "validation":
                 validation.write(text)
             else:
