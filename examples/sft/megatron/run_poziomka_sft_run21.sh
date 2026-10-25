@@ -51,9 +51,9 @@ export TRAIN_ITERS=4094
 # Cala walidacja: 131 sekwencji, 9 x 16 = 144 (8 x 16 = 128 by jej nie pokrylo).
 export EVAL_ITERS=9
 export EXPECTED_TRAIN_RECORDS=1248057
-# Zapisy co ~1/8 epoki (512) i walidacja co ~1/16 epoki (256), jak w run 15.
-export SAVE_INTERVAL=$(( (TRAIN_ITERS + 7) / 8 ))
-export EVAL_INTERVAL=$(( (TRAIN_ITERS + 15) / 16 ))
+# Zapisy co 1600 krokow: 1600, 3200 plus koncowy 4094 (~24 GB). Walidacja co 800 krokow.
+export SAVE_INTERVAL=1600
+export EVAL_INTERVAL=800
 export DATALOADER_WORKERS=2
 # Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
 # q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.
