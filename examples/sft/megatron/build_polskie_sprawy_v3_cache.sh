@@ -9,6 +9,7 @@ set -euo pipefail
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8    # run 15
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8-nothink  # KD od Bielika
 #   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh jakosc50    # run 21
+#   bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8-jakosc50 # run 23
 #
 # v4-nc to rewizja juz naprawiona fix_polskie_sprawy_v4.py (538,079 rekordow): bez 54
 # rekordow z tagiem think w rozumowaniu i 424 uszkodzonych odpowiedzi Mistrala.
@@ -50,7 +51,11 @@ case "${VERSION}" in
     # definicjami tools (711,312), polaczone przez polacz_jakosc50.py (fun-rp: id =
     # sha256(record_id), thinking off). Run 21. Walidacja 0,2% (2,507 rozmow) zamiast 1%.
     jakosc50) RECORDS=1250564; TRAIN_ON=39499; TRAIN_OFF=1208558; BINS=65492; SPLIT_ARGS="--validation-permille 2" ;;
-    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8, v8-nothink or jakosc50" >&2; exit 1 ;;
+    # Samo polskie-sprawy-v8 z jakosc >= 50 (cpral/polskie-sprawy-v8-jakosc50). Te same id co v8,
+    # wiec walidacja 1% to dokladnie ta czesc walidacji run 15, ktora przeszla filtr. Run 23.
+    # ON/OFF/BINS nieznane do pierwszego buildu.
+    v8-jakosc50) RECORDS=539252; TRAIN_ON=0; TRAIN_OFF=0; BINS=0 ;;
+    *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8, v8-nothink, jakosc50 or v8-jakosc50" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384
 # Domyslnie loss na wszystkich tokenach (jak v3-v8); wersja moze to zawezic.
