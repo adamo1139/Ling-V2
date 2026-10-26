@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Run 23: SFT (zwykle CE) na samym polskie-sprawy-v8 z jakosc >= 50, przepis run 15/21: start
-# z merge'a poziomka-instruct-2026-09-30-7, szablon v13, 16384, pakowanie, GBS 16, warmup 20,
+# z merge'a poziomka-instruct-2026-09-30-7, szablon v13, 16384, pakowanie, GBS 8, warmup 20,
 # stale LR z reguly pierwiastkowej, jedna epoka.
 #
 # Czysty test filtra: run 21 zmienial naraz filtr i mieszanke (doszedl fun-rp) i nie pomogl.
@@ -23,7 +23,7 @@ export MEGATRON_PATH="${REPO_DIR}/Megatron-LM-core_v0.13.0"
 # Cache na nvme (na / brakuje miejsca); build:
 #   WORK_DIR=/media/nvme_2tb/maked/poziomka_train bash Ling-V2/examples/sft/megatron/build_polskie_sprawy_v3_cache.sh v8-jakosc50
 export SFT_DATA="/media/nvme_2tb/maked/poziomka_train/poziomka-sft-cache-polskie-sprawy-v8-jakosc50-v13-16384"
-export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run23_polskie_sprawy_v8_jakosc50_v13_16384_gbs16"
+export SAVE_CHECKPOINT="/media/nvme_2tb/maked/poziomka_train/poziomka_sft_run23_polskie_sprawy_v8_jakosc50_v13_16384_gbs8"
 # Wznowienie: RESUME=1 bash run_poziomka_sft_run23.sh -- wczytuje ostatni checkpoint tego runu
 # (latest_checkpointed_iteration.txt) z licznikami iteracji i probek. Optymalizator nie jest
 # zapisywany (--no-save-optim), wiec momenty Adama startuja od zera przy pelnym LR; warmup
@@ -40,20 +40,22 @@ export MAX_POSITION_EMBEDDINGS=16384   # poziomka_model_args.sh defaults to 8192
 # Merge pochodzi z wag trenowanych na 640000 (run 3/4); 16384 wymaga >= 3,1e5.
 export ROTARY_BASE=640000
 export PACKING=1
-# GBS 16 jak run 10/11/15.
-export GLOBAL_BATCH_SIZE=16
-# Regula pierwiastkowa jak run 7-21: GBS 16 x 15,776 = 252,4k tokenow na krok = 0,120
-# pretreningu -> 3e-4 * sqrt(0,120) = 1,04e-4.
-export LR=1.04e-4
+# GBS 8 (nie 16 jak run 15/21): przy 27k kubelkach GBS 16 daje tylko 1717 krokow, a 8 daje 3433,
+# wiec czestsze zapisy i wiecej punktow krzywej. Cena: przy PP8 i DP1 mikrobatchy = GBS, banka
+# pipeline'u rosnie z 30% do 47%, czyli te same tokeny ~1,3x wolniej.
+export GLOBAL_BATCH_SIZE=8
+# Regula pierwiastkowa jak run 7-21: GBS 8 x 15,776 = 126,2k tokenow na krok = 0,060
+# pretreningu -> 3e-4 * sqrt(0,060) = 7,36e-5.
+export LR=7.36e-5
 export WARMUP_ITERS=20
-# Jedna epoka: 27,458 / 16 = 1716,1 -> 1717.
-export TRAIN_ITERS=1717
-# Cala walidacja: 272 sekwencje = 17 x 16.
-export EVAL_ITERS=17
+# Jedna epoka: 27,458 / 8 = 3432,25 -> 3433.
+export TRAIN_ITERS=3433
+# Cala walidacja: 272 sekwencje = 34 x 8.
+export EVAL_ITERS=34
 export EXPECTED_TRAIN_RECORDS=533922
-# Zapisy co 1600 krokow plus koncowy, walidacja co 800 krokow (jak run 21).
-export SAVE_INTERVAL=1600
-export EVAL_INTERVAL=800
+# Zapisy i walidacja co 1000 krokow: 1000, 2000, 3000 plus koncowy 3433 (~32 GB).
+export SAVE_INTERVAL=1000
+export EVAL_INTERVAL=1000
 export DATALOADER_WORKERS=2
 # Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
 # q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.
@@ -62,7 +64,7 @@ export ROUTER_BIAS_UPDATE_RATE=0
 
 export WANDB_ENTITY="adamo1139-no"
 export WANDB_PROJECT="poziomka-sft"
-export WANDB_NAME="poziomka_sft_run23_polskie_sprawy_v8_jakosc50_v13_16384_packed_gbs16_lr${LR}_wu20_${TRAIN_ITERS}steps"
+export WANDB_NAME="poziomka_sft_run23_polskie_sprawy_v8_jakosc50_v13_16384_packed_gbs8_lr${LR}_wu20_${TRAIN_ITERS}steps"
 export WANDB_MODE="online"
 
 if [[ "${LR}" == "0" || "${TRAIN_ITERS}" == "0" || "${EVAL_ITERS}" == "0" || "${EXPECTED_TRAIN_RECORDS}" == "0" ]]; then
