@@ -47,9 +47,10 @@ export TRAIN_ITERS=27458
 # Cala walidacja: 272 sekwencje -> 272 x 1.
 export EVAL_ITERS=272
 export EXPECTED_TRAIN_RECORDS=533922
-# Zapis i walidacja co 1/3 treningu: 9153, 18306 plus koncowy 27458 (~24 GB).
-export SAVE_INTERVAL=9153
-export EVAL_INTERVAL=9153
+# Zapis i walidacja co ~1/3 treningu, zaokraglone w gore do setek: 9200, 18400 plus koncowy
+# 27458 (~24 GB).
+export SAVE_INTERVAL=9200
+export EVAL_INTERVAL=9200
 export DATALOADER_WORKERS=2
 # Zapis synchroniczny: async save run 5 i run 6 (pierwsza proba) zerowal 35/128 wartosci
 # q_layernorm w pierwszej warstwie czesci etapow pipeline'u; model w pamieci byl zdrowy.
