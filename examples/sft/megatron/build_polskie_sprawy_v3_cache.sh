@@ -53,8 +53,7 @@ case "${VERSION}" in
     jakosc50) RECORDS=1250564; TRAIN_ON=39499; TRAIN_OFF=1208558; BINS=65492; SPLIT_ARGS="--validation-permille 2" ;;
     # Samo polskie-sprawy-v8 z jakosc >= 50 (cpral/polskie-sprawy-v8-jakosc50). Te same id co v8,
     # wiec walidacja 1% to dokladnie ta czesc walidacji run 15, ktora przeszla filtr. Run 23.
-    # ON/OFF/BINS nieznane do pierwszego buildu.
-    v8-jakosc50) RECORDS=539252; TRAIN_ON=0; TRAIN_OFF=0; BINS=0 ;;
+    v8-jakosc50) RECORDS=539252; TRAIN_ON=39207; TRAIN_OFF=494715; BINS=27458 ;;
     *) echo "Unknown version ${VERSION}; use v3, v4-nc, v6, v6-reasoning, v8, v8-nothink, jakosc50 or v8-jakosc50" >&2; exit 1 ;;
 esac
 SEQ_LENGTH=16384

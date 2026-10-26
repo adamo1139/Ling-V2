@@ -10,7 +10,8 @@ set -euo pipefail
 # (539,252 z 1,325,738). Walidacja 1% po id jak w run 15, wiec to ta czesc walidacji run 15,
 # ktora przeszla filtr. Cache: build_polskie_sprawy_v3_cache.sh v8-jakosc50.
 #
-# LR, TRAIN_ITERS, EVAL_ITERS i EXPECTED_TRAIN_RECORDS (0 ponizej) wypisuje pierwszy build cache.
+# Cache (build v8-jakosc50): 533,922 rozmow train (39,207 ON, 494,715 OFF), 27,458 kubelkow,
+# pakowanie 96,2%, 15,776 prawdziwych tokenow na sekwencje, 5,330 rozmow walidacji (272 sekwencje).
 # Eksport HF musi dostac chat_template.jinja z cache (tools/dcp_do_hf.sh robi to sam).
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,14 +42,15 @@ export ROTARY_BASE=640000
 export PACKING=1
 # GBS 16 jak run 10/11/15.
 export GLOBAL_BATCH_SIZE=16
-# Regula pierwiastkowa jak run 7-21 (tabela z buildu cache, wiersz GBS 16).
-export LR=0
+# Regula pierwiastkowa jak run 7-21: GBS 16 x 15,776 = 252,4k tokenow na krok = 0,120
+# pretreningu -> 3e-4 * sqrt(0,120) = 1,04e-4.
+export LR=1.04e-4
 export WARMUP_ITERS=20
-# Jedna epoka: kubelki / 16, w gore (build wypisuje).
-export TRAIN_ITERS=0
-# Cala walidacja: sekwencje walidacji / 16, w gore.
-export EVAL_ITERS=0
-export EXPECTED_TRAIN_RECORDS=0
+# Jedna epoka: 27,458 / 16 = 1716,1 -> 1717.
+export TRAIN_ITERS=1717
+# Cala walidacja: 272 sekwencje = 17 x 16.
+export EVAL_ITERS=17
+export EXPECTED_TRAIN_RECORDS=533922
 # Zapisy co 1600 krokow plus koncowy, walidacja co 800 krokow (jak run 21).
 export SAVE_INTERVAL=1600
 export EVAL_INTERVAL=800
